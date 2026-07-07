@@ -25,6 +25,28 @@ interface Props {
   fontFamily?: string;
 }
 
+/** Audio要素の音量を段階的に変化させる（プレビュー用の簡易フェード）。戻り値は中断関数 */
+function rampVolume(
+  audio: HTMLAudioElement,
+  from: number,
+  to: number,
+  seconds: number,
+  onDone?: () => void,
+): () => void {
+  const stepMs = 50;
+  const steps = Math.max(1, Math.round((seconds * 1000) / stepMs));
+  let i = 0;
+  const timer = setInterval(() => {
+    i++;
+    audio.volume = Math.min(1, Math.max(0, from + ((to - from) * i) / steps));
+    if (i >= steps) {
+      clearInterval(timer);
+      onDone?.();
+    }
+  }, stepMs);
+  return () => clearInterval(timer);
+}
+
 export function PreviewPane({
   cuts,
   characters,
@@ -91,26 +113,45 @@ export function PreviewPane({
   // cut オブジェクトは脚本の再パースで毎回作り直されるため、参照ではなく
   // カット位置（index）の変化でガードしないと編集のたびにSEが再発火する
   const lastSeCutIndex = useRef<number>(-1);
+  const fadeCancelRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!cut) return;
-    if (cut.bgm !== currentBgmName.current) {
-      bgmRef.current?.pause();
+    if ((cut.bgm?.asset ?? null) !== currentBgmName.current) {
+      fadeCancelRef.current?.();
+      const old = bgmRef.current;
       bgmRef.current = null;
-      currentBgmName.current = cut.bgm;
-      const asset = cut.bgm ? assets.get(cut.bgm) : undefined;
-      if (asset?.kind === 'audio') {
+      currentBgmName.current = cut.bgm?.asset ?? null;
+
+      // 直前トラックはフェードアウト指定があれば徐々に消す
+      if (old) {
+        const fadeOut = cut.bgmFadeOutSeconds ?? 0;
+        if (fadeOut > 0) rampVolume(old, old.volume, 0, fadeOut, () => old.pause());
+        else old.pause();
+      }
+
+      const asset = cut.bgm ? assets.get(cut.bgm.asset) : undefined;
+      if (cut.bgm && asset?.kind === 'audio') {
         const audio = new Audio(asset.url);
         audio.loop = true;
-        audio.volume = 0.6;
+        if (cut.bgm.fadeInSeconds > 0) {
+          audio.volume = 0;
+          fadeCancelRef.current = rampVolume(audio, 0, cut.bgm.volume, cut.bgm.fadeInSeconds);
+        } else {
+          audio.volume = cut.bgm.volume;
+        }
         audio.play().catch(() => {});
         bgmRef.current = audio;
       }
+    } else if (bgmRef.current && cut.bgm) {
+      // 同一トラックの音量変更
+      bgmRef.current.volume = cut.bgm.volume;
     }
     if (cut.index !== lastSeCutIndex.current) {
       lastSeCutIndex.current = cut.index;
-      const se = cut.se ? assets.get(cut.se) : undefined;
-      if (se?.kind === 'audio') {
+      const se = cut.se ? assets.get(cut.se.asset) : undefined;
+      if (cut.se && se?.kind === 'audio') {
         const audio = new Audio(se.url);
+        audio.volume = cut.se.volume;
         audio.play().catch(() => {});
       }
     }

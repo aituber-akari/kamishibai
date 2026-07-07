@@ -93,8 +93,9 @@ export type StagePosition = 'left' | 'center' | 'right';
 
 export type ScriptCommand =
   | { type: 'bg'; asset: string; line: number }
-  | { type: 'bgm'; asset: string | null; line: number } // null = stop
-  | { type: 'se'; asset: string; line: number }
+  // asset null = stop。volume は 0-1、fadeSeconds はフェードイン/アウト秒
+  | { type: 'bgm'; asset: string | null; volume?: number; fadeSeconds?: number; line: number }
+  | { type: 'se'; asset: string; volume?: number; line: number }
   | { type: 'show'; name: string; expression?: string; position?: StagePosition; flip?: boolean; line: number }
   | { type: 'hide'; name: string; line: number }
   | { type: 'damage'; name: string; amount: number; line: number }
@@ -176,15 +177,29 @@ export type MapState =
   | { kind: 'image'; asset: string; chips: ChipState[]; marks: MapMark[] }
   | { kind: 'lanes'; lanes: Lane[]; rows: number; chips: ChipState[]; marks: MapMark[] };
 
+/** BGMの再生状態。fadeInSeconds はこのトラックが始まるときのフェードイン */
+export interface BgmState {
+  asset: string;
+  volume: number;
+  fadeInSeconds: number;
+}
+
+/** このカットで鳴らすSE */
+export interface SeState {
+  asset: string;
+  volume: number;
+}
+
 /** 1カット = プレビュー/動画の1画面ぶんの完全な描画状態 */
 export interface Cut {
   index: number;
   /** 脚本上の行番号（エディタ連携用） */
   line: number;
   bg: string | null;
-  bgm: string | null;
-  /** このカットで鳴らすSE */
-  se: string | null;
+  bgm: BgmState | null;
+  /** このカットの頭で直前のBGMをフェードアウトさせる秒数（@bgm stop fade 等） */
+  bgmFadeOutSeconds: number | null;
+  se: SeState | null;
   /** 戦闘マップ／ダンジョンマップ（背景とは別レイヤー） */
   map: MapState | null;
   portraits: PortraitState[];

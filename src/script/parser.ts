@@ -57,12 +57,26 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
     case 'bg':
       if (!args[0]) return err('@bg には背景のファイル名が必要です');
       return { type: 'bg', asset: args[0], line };
-    case 'bgm':
+    case 'bgm': {
+      // 「@bgm 戦闘.mp3 [音量0-1] [fade|fade=秒]」「@bgm stop [fade=秒]」
       if (!args[0]) return err('@bgm にはファイル名か stop が必要です');
-      return { type: 'bgm', asset: args[0] === 'stop' ? null : args[0], line };
-    case 'se':
+      const opts = parseAudioOptions(args.slice(1));
+      if (opts.error) return err(`@bgm: ${opts.error}`);
+      return {
+        type: 'bgm',
+        asset: args[0] === 'stop' ? null : args[0],
+        volume: opts.volume,
+        fadeSeconds: opts.fadeSeconds,
+        line,
+      };
+    }
+    case 'se': {
+      // 「@se ダイス.wav [音量0-1]」
       if (!args[0]) return err('@se にはファイル名が必要です');
-      return { type: 'se', asset: args[0], line };
+      const opts = parseAudioOptions(args.slice(1));
+      if (opts.error) return err(`@se: ${opts.error}`);
+      return { type: 'se', asset: args[0], volume: opts.volume, line };
+    }
     case 'show': {
       if (!args[0]) return err('@show にはキャラクター名が必要です');
       const rest = args.slice(1);
@@ -167,6 +181,35 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
     default:
       return err(`未知のコマンドです: @${head}`);
   }
+}
+
+/** 既定のフェード秒（「fade」とだけ書いたとき） */
+const DEFAULT_FADE_SECONDS = 1.5;
+
+/** @bgm/@se の追加引数（音量・フェード）を解釈する */
+function parseAudioOptions(args: string[]): {
+  volume?: number;
+  fadeSeconds?: number;
+  error?: string;
+} {
+  let volume: number | undefined;
+  let fadeSeconds: number | undefined;
+  for (const a of args) {
+    if (a === 'fade') {
+      fadeSeconds = DEFAULT_FADE_SECONDS;
+    } else if (a.startsWith('fade=')) {
+      const n = Number(a.slice(5));
+      if (!Number.isFinite(n) || n < 0) return { error: `fade= には0以上の秒数を指定してください: ${a}` };
+      fadeSeconds = n;
+    } else if (Number.isFinite(Number(a))) {
+      const n = Number(a);
+      if (n < 0 || n > 1) return { error: `音量は 0〜1 で指定してください: ${a}` };
+      volume = n;
+    } else {
+      return { error: `解釈できない指定です: ${a}（音量0-1 / fade / fade=秒）` };
+    }
+  }
+  return { volume, fadeSeconds };
 }
 
 function truncate(s: string, n = 20): string {

@@ -1,4 +1,5 @@
 import type {
+  BgmState,
   Character,
   Cut,
   GameTemplate,
@@ -7,6 +8,7 @@ import type {
   ParseError,
   PortraitState,
   ScriptCommand,
+  SeState,
 } from '../types';
 
 /** wait 指定がないカットの既定表示時間（秒）。プレビューとmp4書き出しで共有する */
@@ -20,7 +22,7 @@ export interface BuildResult {
 
 interface FoldState {
   bg: string | null;
-  bgm: string | null;
+  bgm: BgmState | null;
   statusVisible: boolean;
   map: MapState | null;
   portraits: PortraitState[];
@@ -66,17 +68,20 @@ export function buildCuts(
   const cuts: Cut[] = [];
 
   // 次のセリフ行に乗せる一時演出
-  let pendingSe: string | null = null;
+  let pendingSe: SeState | null = null;
   let pendingDamage: Cut['damagePopup'] = null;
   let pendingDice: Cut['dice'] = null;
   let pendingWait: number | null = null;
+  // 直前BGMのフェードアウト（@bgm 切替/stop に fade 指定があったとき、次のカットに記録）
+  let pendingBgmFadeOut: number | null = null;
 
   const pushCut = (message: Cut['message'], line: number) => {
     cuts.push({
       index: cuts.length,
       line,
       bg: state.bg,
-      bgm: state.bgm,
+      bgm: state.bgm ? { ...state.bgm } : null,
+      bgmFadeOutSeconds: pendingBgmFadeOut,
       se: pendingSe,
       map: structuredClone(state.map),
       portraits: state.portraits.map((p) => ({ ...p })),
@@ -93,6 +98,7 @@ export function buildCuts(
     pendingDamage = null;
     pendingDice = null;
     pendingWait = null;
+    pendingBgmFadeOut = null;
   };
 
   for (const cmd of commands) {
@@ -100,11 +106,26 @@ export function buildCuts(
       case 'bg':
         state.bg = cmd.asset;
         break;
-      case 'bgm':
-        state.bgm = cmd.asset;
+      case 'bgm': {
+        const changed = (state.bgm?.asset ?? null) !== cmd.asset;
+        if (changed && state.bgm && cmd.fadeSeconds) {
+          // 切替/停止時のfadeは「直前トラックのフェードアウト」として次のカットに記録
+          pendingBgmFadeOut = cmd.fadeSeconds;
+        }
+        state.bgm =
+          cmd.asset === null
+            ? null
+            : {
+                asset: cmd.asset,
+                volume: cmd.volume ?? state.bgm?.volume ?? 0.6,
+                fadeInSeconds: changed ? (cmd.fadeSeconds ?? 0) : (state.bgm?.fadeInSeconds ?? 0),
+              };
+        // 同一トラックのまま音量だけ変える指定にも対応
+        if (!changed && state.bgm && cmd.volume !== undefined) state.bgm.volume = cmd.volume;
         break;
+      }
       case 'se':
-        pendingSe = cmd.asset;
+        pendingSe = { asset: cmd.asset, volume: cmd.volume ?? 1 };
         break;
       case 'status':
         state.statusVisible = cmd.visible;
