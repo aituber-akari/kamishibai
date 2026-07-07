@@ -356,7 +356,8 @@ function drawStatusBar(
   ctx.stroke();
 
   const shown = characters.filter((c) => c.showInStatusBar);
-  const globalW = 220;
+  // 人数が多いときは王国パネルを細くしてキャラセルの幅を確保する
+  const globalW = shown.length >= 6 ? 150 : 220;
   const cellW = shown.length > 0 ? (CANVAS_W - globalW) / shown.length : 0;
 
   shown.forEach((ch, i) => {
@@ -376,51 +377,65 @@ function drawCharacterCell(
   x: number,
   w: number,
 ): void {
-  const pad = 10;
-  // 顔アイコン
-  const iconSize = BAR_H - pad * 2;
-  const icon = ch.faceIcon ? findImage(images, ch.faceIcon) : undefined;
-  if (icon) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(x + pad, pad, iconSize, iconSize, 8);
-    ctx.clip();
-    // coverフィット後、キャラごとの倍率でズーム（顔だけ大きく見せる等の調整用）
-    const scale = Math.max(iconSize / icon.width, iconSize / icon.height) * (ch.faceIconScale ?? 1);
-    ctx.drawImage(
-      icon,
-      x + pad + (iconSize - icon.width * scale) / 2,
-      pad + (iconSize - icon.height * scale) / 2,
-      icon.width * scale,
-      icon.height * scale,
-    );
-    ctx.restore();
-  } else {
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.beginPath();
-    ctx.roundRect(x + pad, pad, iconSize, iconSize, 8);
-    ctx.fill();
+  // セル幅に合わせてアイコン・文字を縮小する（6人パーティ等でも溢れないように）
+  const compact = w < 220;
+  const pad = compact ? 8 : 10;
+  const textW = compact ? 96 : 130;
+  const nameFont = compact ? 14 : 17;
+  const paramFont = compact ? 11.5 : 13;
+  const rowH = compact ? 19 : 21;
+  const firstRowY = pad + (compact ? 21 : 26);
+  const valueOffset = compact ? 38 : 44;
+
+  // 顔アイコンはテキストに必要な幅を確保した残りに収める。狭すぎるときは省略
+  const iconSize = Math.min(BAR_H - pad * 2, w - textW - pad * 3);
+  const showIcon = iconSize >= 36;
+  if (showIcon) {
+    const icon = ch.faceIcon ? findImage(images, ch.faceIcon) : undefined;
+    const iconY = (BAR_H - iconSize) / 2;
+    if (icon) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(x + pad, iconY, iconSize, iconSize, 8);
+      ctx.clip();
+      // coverフィット後、キャラごとの倍率でズーム（顔だけ大きく見せる等の調整用）
+      const scale = Math.max(iconSize / icon.width, iconSize / icon.height) * (ch.faceIconScale ?? 1);
+      ctx.drawImage(
+        icon,
+        x + pad + (iconSize - icon.width * scale) / 2,
+        iconY + (iconSize - icon.height * scale) / 2,
+        icon.width * scale,
+        icon.height * scale,
+      );
+      ctx.restore();
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.beginPath();
+      ctx.roundRect(x + pad, iconY, iconSize, iconSize, 8);
+      ctx.fill();
+    }
   }
 
-  const textX = x + pad + iconSize + 10;
+  const textX = x + pad + (showIcon ? iconSize + pad : 0);
+  const textMaxW = x + w - textX - pad;
   // 名前
   ctx.fillStyle = '#fff';
-  ctx.font = `bold 17px ${FONT}`;
+  ctx.font = `bold ${nameFont}px ${FONT}`;
   ctx.textBaseline = 'top';
-  ctx.fillText(ch.name, textX, pad, w - iconSize - pad * 3);
+  ctx.fillText(ch.name, textX, pad, textMaxW);
 
   // パラメータ
   const params = cut.paramsSnapshot[ch.name] ?? ch.params;
-  ctx.font = `13px ${FONT}`;
-  let y = pad + 26;
+  ctx.font = `${paramFont}px ${FONT}`;
+  let y = firstRowY;
   for (const def of template.characterParams) {
     const v = params[def.key];
     ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.fillText(def.label, textX, y);
+    ctx.fillText(def.label, textX, y, valueOffset - 4);
     ctx.fillStyle = paramColor(def.key, v, template);
-    ctx.fillText(formatParam(v), textX + 44, y);
-    y += 21;
-    if (y > BAR_H - 16) break;
+    ctx.fillText(formatParam(v), textX + valueOffset, y, textMaxW - valueOffset);
+    y += rowH;
+    if (y > BAR_H - rowH + 4) break;
   }
 }
 
@@ -434,15 +449,18 @@ function drawGlobalPanel(
   ctx.fillStyle = 'rgba(255,255,255,0.06)';
   ctx.fillRect(x, 0, w, BAR_H);
 
-  ctx.font = `13px ${FONT}`;
+  const compact = w < 180;
+  const font = compact ? 11.5 : 13;
+  const valueX = compact ? 84 : 100;
+  ctx.font = `${font}px ${FONT}`;
   ctx.textBaseline = 'top';
   let y = 10;
   for (const def of template.globalParams) {
     const v = cut.globalSnapshot[def.key];
     ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.fillText(def.label, x + 14, y);
+    ctx.fillText(def.label, x + 12, y, valueX - 16);
     ctx.fillStyle = '#fff';
-    ctx.fillText(formatParam(v), x + 100, y);
+    ctx.fillText(formatParam(v), x + valueX, y, w - valueX - 10);
     y += 22;
     if (y > BAR_H - 16) break;
   }
