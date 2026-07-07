@@ -170,6 +170,39 @@ function CharacterCard({
             </option>
           ))}
         </select>
+        <span className="row-label">倍率</span>
+        <input
+          type="number"
+          step={0.1}
+          min={0.2}
+          max={5}
+          value={ch.faceIconScale ?? 1}
+          onChange={(e) => onUpdate({ faceIconScale: Number(e.target.value) || 1 })}
+        />
+      </div>
+      <div className="row">
+        <span className="row-label">マップチップ</span>
+        <select
+          value={ch.chipImage ?? ''}
+          onChange={(e) => onUpdate({ chipImage: e.target.value || undefined })}
+          title="@chip でマップに置く画像。未設定なら顔アイコンを使います"
+        >
+          <option value="">（顔アイコンを使用）</option>
+          {imageAssets.map((a) => (
+            <option key={a.name} value={a.name}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+        <span className="row-label">倍率</span>
+        <input
+          type="number"
+          step={0.1}
+          min={0.2}
+          max={5}
+          value={ch.chipScale ?? 1}
+          onChange={(e) => onUpdate({ chipScale: Number(e.target.value) || 1 })}
+        />
       </div>
 
       <h3>表示調整</h3>

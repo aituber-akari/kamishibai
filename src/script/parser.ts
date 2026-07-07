@@ -101,6 +101,19 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
         return err('@dice は「@dice [キャラ名] 2d6 出目」の形式です（ダイス指定は 2d6 のような形式）');
       return { type: 'dice', name: args[0], spec: args[1], result: args.slice(2).join(' '), line };
     }
+    case 'map':
+      if (!args[0]) return err('@map にはマップ画像のファイル名か off が必要です');
+      return { type: 'map', asset: args[0] === 'off' ? null : args[0], line };
+    case 'chip': {
+      // 「@chip 名前 x y」（x,y はマップに対する% 0-100）または「@chip 名前 off」
+      if (!args[0]) return err('@chip は「@chip 名前 x y」または「@chip 名前 off」の形式です');
+      if (args[1] === 'off') return { type: 'chip', name: args[0], x: null, y: null, line };
+      const x = Number(args[1]);
+      const y = Number(args[2]);
+      if (!Number.isFinite(x) || !Number.isFinite(y))
+        return err('@chip の座標はマップに対する%（0-100）で「@chip 名前 25 40」のように指定します');
+      return { type: 'chip', name: args[0], x, y, line };
+    }
     case 'status':
       if (args[0] !== 'on' && args[0] !== 'off') return err('@status は on か off を指定してください');
       return { type: 'status', visible: args[0] === 'on', line };

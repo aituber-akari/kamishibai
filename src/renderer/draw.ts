@@ -1,4 +1,4 @@
-import type { Character, Cut, DiceEffect, GameTemplate, ParamValue } from '../types';
+import type { Character, Cut, DiceEffect, GameTemplate, MapState, ParamValue } from '../types';
 
 export const CANVAS_W = 1280;
 export const CANVAS_H = 720;
@@ -37,6 +37,7 @@ export function drawCut(
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
   drawBackground(ctx, cut, images);
+  if (cut.map) drawMap(ctx, cut.map, images, characters);
   drawPortraits(ctx, cut, images, characters);
   if (cut.statusVisible) drawStatusBar(ctx, cut, images, characters, template);
   if (cut.dice) drawDice(ctx, cut.dice, images, characters, options);
@@ -103,6 +104,67 @@ function drawPortraits(
       ctx.drawImage(darkened(img), x, y, w, h);
     } else {
       ctx.drawImage(img, x, y, w, h);
+    }
+  }
+}
+
+// ============ 戦闘マップ／ダンジョンマップ ============
+
+function drawMap(
+  ctx: CanvasRenderingContext2D,
+  map: MapState,
+  images: ImageStore,
+  characters: Character[],
+): void {
+  const img = findImage(images, map.asset);
+  if (!img) return;
+
+  // 表示領域: ステータスバーの下〜メッセージウィンドウの上、左は立ち絵ぶんを空ける
+  const area = { x: 320, y: BAR_H + 16, w: CANVAS_W - 320 - 24, h: CANVAS_H - BAR_H - 16 - 230 };
+  const scale = Math.min(area.w / img.width, area.h / img.height);
+  const w = img.width * scale;
+  const h = img.height * scale;
+  const x = area.x + (area.w - w) / 2;
+  const y = area.y + (area.h - h) / 2;
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  ctx.shadowBlur = 18;
+  ctx.drawImage(img, x, y, w, h);
+  ctx.restore();
+
+  // キャラチップ（座標はマップ画像に対する% 0-100）
+  const charByName = new Map(characters.map((c) => [c.name, c]));
+  for (const chip of map.chips) {
+    const ch = charByName.get(chip.characterName);
+    if (!ch) continue;
+    const asset = ch.chipImage ?? ch.faceIcon;
+    const chipImg = asset ? findImage(images, asset) : undefined;
+    const cx = x + (chip.x / 100) * w;
+    const cy = y + (chip.y / 100) * h;
+    const size = Math.max(24, h * 0.1) * (ch.chipScale ?? 1);
+    if (chipImg) {
+      const s = size / Math.max(chipImg.width, chipImg.height);
+      ctx.drawImage(
+        chipImg,
+        cx - (chipImg.width * s) / 2,
+        cy - (chipImg.height * s) / 2,
+        chipImg.width * s,
+        chipImg.height * s,
+      );
+    } else {
+      // チップ画像未設定時は名前入りのプレースホルダ
+      ctx.save();
+      ctx.fillStyle = 'rgba(88, 101, 242, 0.9)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${Math.max(11, size * 0.32)}px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(chip.characterName.slice(0, 2), cx, cy);
+      ctx.restore();
     }
   }
 }
@@ -177,7 +239,8 @@ function drawCharacterCell(
     ctx.beginPath();
     ctx.roundRect(x + pad, pad, iconSize, iconSize, 8);
     ctx.clip();
-    const scale = Math.max(iconSize / icon.width, iconSize / icon.height);
+    // coverフィット後、キャラごとの倍率でズーム（顔だけ大きく見せる等の調整用）
+    const scale = Math.max(iconSize / icon.width, iconSize / icon.height) * (ch.faceIconScale ?? 1);
     ctx.drawImage(
       icon,
       x + pad + (iconSize - icon.width * scale) / 2,

@@ -2,6 +2,7 @@ import type {
   Character,
   Cut,
   GameTemplate,
+  MapState,
   ParamValue,
   ParseError,
   PortraitState,
@@ -21,6 +22,7 @@ interface FoldState {
   bg: string | null;
   bgm: string | null;
   statusVisible: boolean;
+  map: MapState | null;
   portraits: PortraitState[];
   params: Record<string, Record<string, ParamValue>>;
   globals: Record<string, ParamValue>;
@@ -42,6 +44,7 @@ export function buildCuts(
     bg: null,
     bgm: null,
     statusVisible: true,
+    map: null,
     portraits: [],
     params: Object.fromEntries(characters.map((c) => [c.name, structuredClone(c.params)])),
     globals: structuredClone(globalParams),
@@ -63,6 +66,7 @@ export function buildCuts(
       bg: state.bg,
       bgm: state.bgm,
       se: pendingSe,
+      map: state.map ? { asset: state.map.asset, chips: state.map.chips.map((c) => ({ ...c })) } : null,
       portraits: state.portraits.map((p) => ({ ...p })),
       statusVisible: state.statusVisible,
       paramsSnapshot: structuredClone(state.params),
@@ -92,6 +96,25 @@ export function buildCuts(
       case 'status':
         state.statusVisible = cmd.visible;
         break;
+      case 'map':
+        // マップを消すとチップも消える。マップ差し替え時はチップを維持する
+        state.map = cmd.asset === null ? null : { asset: cmd.asset, chips: state.map?.chips ?? [] };
+        break;
+      case 'chip': {
+        if (!state.map) {
+          warnings.push({ line: cmd.line, message: '@chip の前に @map でマップを表示してください' });
+          break;
+        }
+        if (!charByName.has(cmd.name)) {
+          warnings.push({ line: cmd.line, message: `「${cmd.name}」は未登録のキャラクターです（@chip は無視されます）` });
+          break;
+        }
+        state.map.chips = state.map.chips.filter((c) => c.characterName !== cmd.name);
+        if (cmd.x !== null && cmd.y !== null) {
+          state.map.chips.push({ characterName: cmd.name, x: cmd.x, y: cmd.y });
+        }
+        break;
+      }
       case 'wait':
         pendingWait = cmd.seconds;
         break;

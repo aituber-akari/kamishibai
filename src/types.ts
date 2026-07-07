@@ -54,6 +54,12 @@ export interface Character {
   portraitOffsetY?: number;
   /** このキャラのダイスアニメに使う素材フォルダ（未設定ならプロジェクト既定） */
   diceFolder?: string;
+  /** 顔アイコンのズーム倍率（既定 1.0 = セルにcoverフィット） */
+  faceIconScale?: number;
+  /** マップ用キャラチップ画像（未設定なら顔アイコンを使う） */
+  chipImage?: string;
+  /** キャラチップの表示倍率（既定 1.0） */
+  chipScale?: number;
 }
 
 // ============ 脚本コマンド ============
@@ -71,6 +77,8 @@ export type ScriptCommand =
   | { type: 'set'; name: string; param: string; value: string; line: number }
   | { type: 'setglobal'; param: string; value: string; line: number }
   | { type: 'dice'; name?: string; spec: string; result: string; line: number }
+  | { type: 'map'; asset: string | null; line: number } // null = 非表示
+  | { type: 'chip'; name: string; x: number | null; y: number | null; line: number } // null = 撤去
   | { type: 'status'; visible: boolean; line: number }
   | { type: 'wait'; seconds: number; line: number }
   | { type: 'say'; name: string; expression?: string; text: string; line: number };
@@ -106,6 +114,19 @@ export interface DiceEffect {
   characterName?: string;
 }
 
+/** マップ上のキャラチップ。座標はマップ画像に対する百分率（0-100） */
+export interface ChipState {
+  characterName: string;
+  x: number;
+  y: number;
+}
+
+/** 戦闘マップ／ダンジョンマップの表示状態 */
+export interface MapState {
+  asset: string;
+  chips: ChipState[];
+}
+
 /** 1カット = プレビュー/動画の1画面ぶんの完全な描画状態 */
 export interface Cut {
   index: number;
@@ -115,6 +136,8 @@ export interface Cut {
   bgm: string | null;
   /** このカットで鳴らすSE */
   se: string | null;
+  /** 戦闘マップ／ダンジョンマップ（背景とは別レイヤー） */
+  map: MapState | null;
   portraits: PortraitState[];
   statusVisible: boolean;
   /** キャラ名 → パラメータのスナップショット */

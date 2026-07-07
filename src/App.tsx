@@ -51,6 +51,9 @@ function normalizeProject(data: unknown): StoredProject | null {
       portraitScale: typeof c.portraitScale === 'number' ? c.portraitScale : undefined,
       portraitOffsetY: typeof c.portraitOffsetY === 'number' ? c.portraitOffsetY : undefined,
       diceFolder: typeof c.diceFolder === 'string' ? c.diceFolder : undefined,
+      faceIconScale: typeof c.faceIconScale === 'number' ? c.faceIconScale : undefined,
+      chipImage: typeof c.chipImage === 'string' ? c.chipImage : undefined,
+      chipScale: typeof c.chipScale === 'number' ? c.chipScale : undefined,
     }));
   return {
     script: d.script,

@@ -53,6 +53,12 @@
   min-width: 0;
 }
 
+/* プレビューと設定パネルを両立させるため右カラムは縦スクロール可能にする */
+.right-column {
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
 /* ============ パネル共通 ============ */
 
 .panel {
@@ -118,13 +124,18 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 14px;
+  flex-shrink: 0;
 }
 
 .preview-canvas {
+  display: block;
   width: 100%;
+  max-height: 52vh;
   aspect-ratio: 16 / 9;
+  margin: 0 auto;
   border-radius: 8px;
   background: #000;
+  object-fit: contain;
 }
 
 .preview-controls {
@@ -147,15 +158,18 @@
 /* ============ 下段パネル ============ */
 
 .bottom-panels {
-  flex: 1;
   display: grid;
   grid-template-columns: 3fr 2fr;
   gap: 14px;
-  min-height: 0;
+  flex-shrink: 0;
 }
 
+/* キャラクター/素材パネルは十分な高さを確保し、右下の掴みでさらに拡大できる */
 .bottom-panels .panel {
   overflow-y: auto;
+  min-height: 420px;
+  max-height: none;
+  resize: vertical;
 }
 
 /* ============ キャラクター ============ */
