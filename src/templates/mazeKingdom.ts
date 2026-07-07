@@ -18,6 +18,11 @@ export const mazeKingdomTemplate: GameTemplate = {
     { key: 'production', label: '生産力', kind: 'number', defaultValue: 0 },
   ],
   damageParamKey: 'hp',
+  battlefield: {
+    defaultLanes: ['味方本陣', '味方後衛', '味方前衛', '敵前衛', '敵後衛', '敵本陣'],
+    rows: 5,
+    sideKeywords: { ally: ['味方', '自軍'], enemy: ['敵'] },
+  },
 };
 
 export const templates: GameTemplate[] = [mazeKingdomTemplate];

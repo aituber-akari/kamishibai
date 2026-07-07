@@ -16,6 +16,8 @@ const STORAGE_KEY = 'kamishibai-project-v1';
 interface StoredProject {
   script: string;
   characters: Character[];
+  /** ゲームテンプレートID（現状は maze-kingdom のみ。将来のテンプレート追加用） */
+  templateId?: string;
   /** ダイスの連番アニメを再生するか（既定 true） */
   diceAnimation?: boolean;
   /** キャラにダイスセット未設定のときに使う素材フォルダ */
@@ -68,6 +70,7 @@ function normalizeProject(data: unknown): StoredProject | null {
   return {
     script: d.script,
     characters,
+    templateId: typeof d.templateId === 'string' ? d.templateId : undefined,
     diceAnimation: d.diceAnimation !== false,
     defaultDiceFolder: typeof d.defaultDiceFolder === 'string' ? d.defaultDiceFolder : undefined,
     fontFamily: typeof d.fontFamily === 'string' ? d.fontFamily : undefined,
@@ -90,8 +93,9 @@ interface ProjectFile extends StoredProject {
 }
 
 export default function App() {
-  const template = getTemplate('maze-kingdom');
   const stored = useMemo(loadStored, []);
+  const [templateId, setTemplateId] = useState(stored?.templateId ?? 'maze-kingdom');
+  const template = getTemplate(templateId);
   const [script, setScript] = useState(stored?.script ?? SAMPLE_SCRIPT);
   const [characters, setCharacters] = useState<Character[]>(stored?.characters ?? []);
   const [diceAnimation, setDiceAnimation] = useState(stored?.diceAnimation !== false);
@@ -111,14 +115,14 @@ export default function App() {
       try {
         localStorage.setItem(
           STORAGE_KEY,
-          JSON.stringify({ script, characters, diceAnimation, defaultDiceFolder, fontFamily }),
+          JSON.stringify({ script, characters, templateId, diceAnimation, defaultDiceFolder, fontFamily }),
         );
       } catch {
         // quota超過などで保存できなくても編集は続行できる（ファイル書き出しは可能）
       }
     }, 500);
     return () => clearTimeout(t);
-  }, [script, characters, diceAnimation, defaultDiceFolder, fontFamily]);
+  }, [script, characters, templateId, diceAnimation, defaultDiceFolder, fontFamily]);
 
   const globalParams = useMemo(() => {
     const params: Record<string, ParamValue> = {};
@@ -141,6 +145,7 @@ export default function App() {
       version: 1,
       script,
       characters,
+      templateId,
       diceAnimation,
       defaultDiceFolder,
       fontFamily,
@@ -165,6 +170,7 @@ export default function App() {
       }
       setScript(project.script);
       setCharacters(project.characters);
+      setTemplateId(project.templateId ?? 'maze-kingdom');
       setDiceAnimation(project.diceAnimation !== false);
       setDefaultDiceFolder(project.defaultDiceFolder);
       setFontFamily(project.fontFamily);

@@ -48,7 +48,7 @@ export function drawCut(
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
   drawBackground(ctx, cut, images);
-  if (cut.map) drawMap(ctx, cut.map, images, characters, cut.displayNames);
+  if (cut.map) drawMap(ctx, cut.map, images, characters, cut.displayNames, template);
   drawPortraits(ctx, cut, images, characters);
   if (cut.statusVisible) drawStatusBar(ctx, cut, images, characters, template);
   if (cut.dice) drawDice(ctx, cut.dice, images, characters, options);
@@ -148,8 +148,10 @@ function drawMap(
   images: ImageStore,
   characters: Character[],
   displayNames: Record<string, string>,
+  template: GameTemplate,
 ): void {
-  const geo = map.kind === 'image' ? drawImageMap(ctx, map, images) : drawLanesMap(ctx, map);
+  const geo =
+    map.kind === 'image' ? drawImageMap(ctx, map, images) : drawLanesMap(ctx, map, template);
   if (!geo) return;
   drawChips(ctx, map, images, characters, displayNames, geo);
   drawMarks(ctx, map, geo);
@@ -178,10 +180,11 @@ function drawImageMap(
   return { toX: (px) => x + (px / 100) * w, toY: (py) => y + (py / 100) * h, unit: h * 0.1 };
 }
 
-/** ラベルから敵味方を推定する（「敵」を含めば敵側、「味方」を含めば味方側） */
-function laneSide(label: string): 'ally' | 'enemy' | 'neutral' {
-  if (label.includes('敵')) return 'enemy';
-  if (label.includes('味方') || label.includes('自軍')) return 'ally';
+/** ラベルから敵味方を推定する。判定キーワードはゲームテンプレート定義に従う */
+function laneSide(label: string, template: GameTemplate): 'ally' | 'enemy' | 'neutral' {
+  const kw = template.battlefield?.sideKeywords;
+  if (kw?.enemy.some((k) => label.includes(k))) return 'enemy';
+  if (kw?.ally.some((k) => label.includes(k))) return 'ally';
   return 'neutral';
 }
 
@@ -192,6 +195,7 @@ function laneSide(label: string): 'ally' | 'enemy' | 'neutral' {
 function drawLanesMap(
   ctx: CanvasRenderingContext2D,
   map: Extract<MapState, { kind: 'lanes' }>,
+  template: GameTemplate,
 ): MapGeometry | null {
   const n = map.lanes.length;
   if (n === 0) return null;
@@ -208,7 +212,7 @@ function drawLanesMap(
     const lane = map.lanes[i];
     const x = startX + i * (laneW + gap);
     const danger = lane.state === 'danger';
-    const side = laneSide(lane.label);
+    const side = laneSide(lane.label, template);
 
     // 敵味方で色相を変える（色覚多様性に配慮して青系 vs 暖色系）。
     // トラップ発動(danger)は色＋明度＋枠の太さの複数の手がかりで区別する

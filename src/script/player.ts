@@ -12,16 +12,6 @@ import type {
 /** wait 指定がないカットの既定表示時間（秒）。プレビューとmp4書き出しで共有する */
 export const DEFAULT_CUT_SECONDS = 2.5;
 
-/** @bf 引数なしのときの標準戦場（よほど特殊な戦闘でない限りこの構成） */
-export const DEFAULT_BATTLEFIELD_LANES = [
-  '味方本陣',
-  '味方後衛',
-  '味方前衛',
-  '敵前衛',
-  '敵後衛',
-  '敵本陣',
-];
-
 export interface BuildResult {
   cuts: Cut[];
   /** 未登録キャラ名の指定など、実行はできるが意図とズレていそうな箇所 */
@@ -131,12 +121,17 @@ export function buildCuts(
           state.map = null;
           break;
         }
-        // 引数なしは標準戦場（迷宮キングダムの基本配置）
-        const labels = cmd.lanes.length > 0 ? cmd.lanes : DEFAULT_BATTLEFIELD_LANES;
+        // 引数なしはゲームテンプレート定義の標準戦場
+        const bfConfig = template.battlefield;
+        const labels = cmd.lanes.length > 0 ? cmd.lanes : (bfConfig?.defaultLanes ?? []);
+        if (labels.length === 0) {
+          warnings.push({ line: cmd.line, message: `${template.name} には標準戦場の定義がありません。@bf に列ラベルを指定してください` });
+          break;
+        }
         state.map = {
           kind: 'lanes',
           lanes: labels.map((label) => ({ label, state: 'normal' as const, originalLabel: label })),
-          rows: 5,
+          rows: bfConfig?.rows ?? 5,
           chips: state.map?.chips ?? [],
           marks: state.map?.marks ?? [],
         };

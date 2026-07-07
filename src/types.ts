@@ -13,6 +13,16 @@ export interface ParamDef {
   defaultText?: string;
 }
 
+/** 生成戦場マップのゲーム別設定 */
+export interface BattlefieldConfig {
+  /** @bf 引数なしのときの標準の列ラベル */
+  defaultLanes: string[];
+  /** 列あたりの行数 */
+  rows: number;
+  /** ラベルに含まれると味方/敵側の配色になるキーワード */
+  sideKeywords: { ally: string[]; enemy: string[] };
+}
+
 /** ゲームシステムごとのステータス項目定義（迷キン以外はテンプレート追加で対応） */
 export interface GameTemplate {
   id: string;
@@ -23,6 +33,8 @@ export interface GameTemplate {
   globalParams: ParamDef[];
   /** ダメージ/回復コマンドが増減させる pair パラメータの key */
   damageParamKey: string;
+  /** 生成戦場マップの設定（@bf を使わないゲームでは省略可） */
+  battlefield?: BattlefieldConfig;
 }
 
 export type ParamValue =
