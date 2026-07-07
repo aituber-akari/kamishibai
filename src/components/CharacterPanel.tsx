@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import type { Character, GameTemplate, ParamValue } from '../types';
 import type { Asset } from '../hooks/useAssets';
+import { AssetSelect } from './AssetSelect';
 
 interface Props {
   characters: Character[];
   template: GameTemplate;
   assets: Map<string, Asset>;
-  /** 画像を含むフォルダ一覧（ダイスセット選択用） */
-  imageFolders: string[];
   onChange: (characters: Character[]) => void;
 }
 
@@ -25,7 +24,7 @@ export function defaultParams(template: GameTemplate): Record<string, ParamValue
   return params;
 }
 
-export function CharacterPanel({ characters, template, assets, imageFolders, onChange }: Props) {
+export function CharacterPanel({ characters, template, assets, onChange }: Props) {
   const [newName, setNewName] = useState('');
   const imageAssets = [...assets.values()].filter((a) => a.kind === 'image');
 
@@ -71,7 +70,6 @@ export function CharacterPanel({ characters, template, assets, imageFolders, onC
             ch={ch}
             template={template}
             imageAssets={imageAssets}
-            imageFolders={imageFolders}
             onUpdate={(patch) => update(ch.id, patch)}
             onRemove={() => onChange(characters.filter((c) => c.id !== ch.id))}
           />
@@ -84,24 +82,35 @@ export function CharacterPanel({ characters, template, assets, imageFolders, onC
   );
 }
 
+function topFolder(name: string): string {
+  const idx = name.indexOf('/');
+  return idx < 0 ? '' : name.slice(0, idx);
+}
+
 function CharacterCard({
   ch,
   template,
   imageAssets,
-  imageFolders,
   onUpdate,
   onRemove,
 }: {
   ch: Character;
   template: GameTemplate;
   imageAssets: Asset[];
-  imageFolders: string[];
   onUpdate: (patch: Partial<Character>) => void;
   onRemove: () => void;
 }) {
   const [newExpression, setNewExpression] = useState('');
 
-  const setPortrait = (expression: string, assetName: string) => {
+  // キャラに素材フォルダを紐づけると、このカード内の選択候補が絞られる
+  const linked = ch.assetFolders ?? [];
+  const allTopFolders = [...new Set(imageAssets.map((a) => topFolder(a.name)).filter(Boolean))].sort();
+  const scopedAssets =
+    linked.length > 0
+      ? imageAssets.filter((a) => linked.some((f) => a.name === f || a.name.startsWith(f + '/')))
+      : imageAssets;
+
+  const setPortrait = (expression: string, assetName: string | undefined) => {
     const portraits = { ...ch.portraits };
     if (assetName) portraits[expression] = assetName;
     else delete portraits[expression];
@@ -132,28 +141,63 @@ function CharacterCard({
         </button>
       </summary>
 
+      <h3>素材フォルダの紐づけ</h3>
+      <div className="row">
+        <select
+          value=""
+          onChange={(e) => {
+            if (e.target.value && !linked.includes(e.target.value)) {
+              onUpdate({ assetFolders: [...linked, e.target.value] });
+            }
+          }}
+          title="紐づけると、このキャラの素材選択候補がフォルダ内に絞られます"
+        >
+          <option value="">＋ フォルダを紐づける（未紐づけ＝全素材から選択）</option>
+          {allTopFolders
+            .filter((f) => !linked.includes(f))
+            .map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+        </select>
+      </div>
+      {linked.length > 0 && (
+        <div className="row folder-tags">
+          {linked.map((f) => (
+            <span key={f} className="folder-tag">
+              📁 {f}
+              <button
+                className="icon-button"
+                onClick={() => onUpdate({ assetFolders: linked.filter((x) => x !== f) })}
+                title="紐づけ解除"
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       <h3>立ち絵（表情差分）</h3>
       {expressions.map((exp) => (
         <div key={exp} className="row">
           <span className="row-label">{exp}</span>
-          <select value={ch.portraits[exp] ?? ''} onChange={(e) => setPortrait(exp, e.target.value)}>
-            <option value="">（未設定）</option>
-            {imageAssets.map((a) => (
-              <option key={a.name} value={a.name}>
-                {a.name}
-              </option>
-            ))}
-          </select>
+          <AssetSelect
+            imageAssets={scopedAssets}
+            value={ch.portraits[exp]}
+            onChange={(v) => setPortrait(exp, v)}
+          />
         </div>
       ))}
       <div className="row">
         <input
           value={newExpression}
-          placeholder="表情名を追加（例: 笑顔）"
+          placeholder="表情名を追加（例: 笑顔）→ Enter"
           onChange={(e) => setNewExpression(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && newExpression.trim()) {
-              setPortrait(newExpression.trim(), imageAssets[0]?.name ?? '');
+              setPortrait(newExpression.trim(), scopedAssets[0]?.name);
               setNewExpression('');
             }
           }}
@@ -162,14 +206,11 @@ function CharacterCard({
 
       <div className="row">
         <span className="row-label">顔アイコン</span>
-        <select value={ch.faceIcon ?? ''} onChange={(e) => onUpdate({ faceIcon: e.target.value || undefined })}>
-          <option value="">（未設定）</option>
-          {imageAssets.map((a) => (
-            <option key={a.name} value={a.name}>
-              {a.name}
-            </option>
-          ))}
-        </select>
+        <AssetSelect
+          imageAssets={scopedAssets}
+          value={ch.faceIcon}
+          onChange={(v) => onUpdate({ faceIcon: v })}
+        />
         <span className="row-label">倍率</span>
         <input
           type="number"
@@ -182,18 +223,12 @@ function CharacterCard({
       </div>
       <div className="row">
         <span className="row-label">マップチップ</span>
-        <select
-          value={ch.chipImage ?? ''}
-          onChange={(e) => onUpdate({ chipImage: e.target.value || undefined })}
-          title="@chip でマップに置く画像。未設定なら顔アイコンを使います"
-        >
-          <option value="">（顔アイコンを使用）</option>
-          {imageAssets.map((a) => (
-            <option key={a.name} value={a.name}>
-              {a.name}
-            </option>
-          ))}
-        </select>
+        <AssetSelect
+          imageAssets={scopedAssets}
+          value={ch.chipImage}
+          onChange={(v) => onUpdate({ chipImage: v })}
+          placeholder="（顔アイコンを使用）"
+        />
         <span className="row-label">倍率</span>
         <input
           type="number"
@@ -235,18 +270,14 @@ function CharacterCard({
         />
       </div>
       <div className="row">
-        <span className="row-label">ダイスセット</span>
-        <select
-          value={ch.diceFolder ?? ''}
-          onChange={(e) => onUpdate({ diceFolder: e.target.value || undefined })}
-        >
-          <option value="">（プロジェクト既定）</option>
-          {imageFolders.map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
-          ))}
-        </select>
+        <span className="row-label">ダイス</span>
+        <AssetSelect
+          imageAssets={scopedAssets}
+          value={ch.diceFolder}
+          onChange={(v) => onUpdate({ diceFolder: v })}
+          allowFolder
+          placeholder="（プロジェクト既定）"
+        />
       </div>
 
       <h3>パラメータ初期値</h3>

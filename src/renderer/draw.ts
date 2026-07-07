@@ -587,10 +587,15 @@ function drawDamagePopup(
   ctx.restore();
 }
 
-/** フォルダ内の画像をファイル名順で返す（連番アニメのフレーム列） */
-export function diceFrames(images: ImageStore, folder: string | undefined): HTMLImageElement[] {
-  if (!folder) return [];
-  const keys = [...images.keys()].filter((k) => k.startsWith(folder + '/')).sort();
+/**
+ * ダイス素材の解決。フォルダなら中の画像をファイル名順で返し（連番アニメ）、
+ * 画像1枚の指定ならそれだけを返す（転がしアニメなしの静止ダイス）
+ */
+export function diceFrames(images: ImageStore, ref: string | undefined): HTMLImageElement[] {
+  if (!ref) return [];
+  const single = findImage(images, ref);
+  if (single) return [single];
+  const keys = [...images.keys()].filter((k) => k.startsWith(ref + '/')).sort();
   return keys.map((k) => images.get(k)!);
 }
 
@@ -608,7 +613,8 @@ function drawDice(
   const frames = diceFrames(images, folder);
 
   const t = options.timeInCut ?? Infinity;
-  const animate = (options.diceAnimation ?? true) && frames.length > 0;
+  // フレームが1枚だけ（単品画像ダイス）のときは転がさず静止表示
+  const animate = (options.diceAnimation ?? true) && frames.length > 1;
   const rolling = animate && t < DICE_ROLL_SECONDS;
 
   const cx = CANVAS_W / 2;

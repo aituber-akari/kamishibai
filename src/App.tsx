@@ -7,6 +7,7 @@ import { buildCuts } from './script/player';
 import { useAssets } from './hooks/useAssets';
 import { PreviewPane } from './components/PreviewPane';
 import { AssetPanel } from './components/AssetPanel';
+import { AssetSelect } from './components/AssetSelect';
 import { CharacterPanel } from './components/CharacterPanel';
 import { SAMPLE_SCRIPT } from './sampleScript';
 
@@ -55,6 +56,9 @@ function normalizeProject(data: unknown): StoredProject | null {
       chipImage: typeof c.chipImage === 'string' ? c.chipImage : undefined,
       chipScale: typeof c.chipScale === 'number' ? c.chipScale : undefined,
       flipOnRight: c.flipOnRight === true,
+      assetFolders: Array.isArray(c.assetFolders)
+        ? c.assetFolders.filter((f): f is string => typeof f === 'string')
+        : undefined,
     }));
   return {
     script: d.script,
@@ -79,8 +83,11 @@ export default function App() {
   const [defaultDiceFolder, setDefaultDiceFolder] = useState<string | undefined>(
     stored?.defaultDiceFolder,
   );
-  const { assets, imageStore, imageFolders, addFiles, addDropped, removeAsset, removeFolder } =
-    useAssets();
+  const { assets, imageStore, addFiles, addDropped, removeAsset, removeFolder } = useAssets();
+  const imageAssets = useMemo(
+    () => [...assets.values()].filter((a) => a.kind === 'image'),
+    [assets],
+  );
 
   // 脚本とキャラ設定は localStorage に自動保存（素材はM2でIndexedDB対応予定）
   useEffect(() => {
@@ -172,18 +179,13 @@ export default function App() {
             />
             ダイスアニメ
           </label>
-          <select
-            value={defaultDiceFolder ?? ''}
-            onChange={(e) => setDefaultDiceFolder(e.target.value || undefined)}
-            title="キャラにダイスセット未設定のときに使う素材フォルダ"
-          >
-            <option value="">既定ダイス（内蔵）</option>
-            {imageFolders.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
+          <AssetSelect
+            imageAssets={imageAssets}
+            value={defaultDiceFolder}
+            onChange={setDefaultDiceFolder}
+            allowFolder
+            placeholder="既定ダイス（内蔵）"
+          />
           <button onClick={exportProject}>保存（書き出し）</button>
           <button onClick={() => importInputRef.current?.click()}>開く（読み込み）</button>
           <input
@@ -235,7 +237,6 @@ export default function App() {
               characters={characters}
               template={template}
               assets={assets}
-              imageFolders={imageFolders}
               onChange={setCharacters}
             />
             <AssetPanel

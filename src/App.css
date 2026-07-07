@@ -284,6 +284,35 @@
   color: var(--text-dim);
 }
 
+/* 素材の2段選択（フォルダ→ファイル） */
+.asset-select {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.asset-select select {
+  flex: 1;
+  min-width: 0;
+}
+
+/* キャラに紐づけた素材フォルダのタグ */
+.folder-tags {
+  flex-wrap: wrap;
+}
+
+.folder-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
 .header-actions select {
   font-size: 12px;
   max-width: 180px;
