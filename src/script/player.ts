@@ -26,6 +26,8 @@ interface FoldState {
   portraits: PortraitState[];
   params: Record<string, Record<string, ParamValue>>;
   globals: Record<string, ParamValue>;
+  /** 登録名 → 現在の表示名（@name で変更。ステータスバー等に使う） */
+  displayNames: Record<string, string>;
 }
 
 /**
@@ -48,9 +50,19 @@ export function buildCuts(
     portraits: [],
     params: Object.fromEntries(characters.map((c) => [c.name, structuredClone(c.params)])),
     globals: structuredClone(globalParams),
+    displayNames: {},
   };
 
-  const charByName = new Map(characters.map((c) => [c.name, c]));
+  // 登録名と別名のどちらでも同じキャラに解決できるようにする
+  const charByName = new Map<string, Character>();
+  for (const c of characters) {
+    charByName.set(c.name, c);
+    for (const alias of c.aliases ?? []) {
+      if (!charByName.has(alias)) charByName.set(alias, c);
+    }
+  }
+  /** 脚本上の名前 → 登録名（未登録名はそのまま） */
+  const resolve = (name: string) => charByName.get(name)?.name ?? name;
   const cuts: Cut[] = [];
 
   // 次のセリフ行に乗せる一時演出
@@ -70,6 +82,7 @@ export function buildCuts(
       portraits: state.portraits.map((p) => ({ ...p })),
       statusVisible: state.statusVisible,
       paramsSnapshot: structuredClone(state.params),
+      displayNames: { ...state.displayNames },
       globalSnapshot: structuredClone(state.globals),
       message,
       damagePopup: pendingDamage,
@@ -138,9 +151,12 @@ export function buildCuts(
           warnings.push({ line: cmd.line, message: `「${cmd.name}」は未登録のキャラクターです（@chip は無視されます）` });
           break;
         }
-        state.map.chips = state.map.chips.filter((c) => c.characterName !== cmd.name);
-        if (cmd.x !== null && cmd.y !== null) {
-          state.map.chips.push({ characterName: cmd.name, x: cmd.x, y: cmd.y });
+        {
+          const entity = resolve(cmd.name);
+          state.map.chips = state.map.chips.filter((c) => c.characterName !== entity);
+          if (cmd.x !== null && cmd.y !== null) {
+            state.map.chips.push({ characterName: entity, x: cmd.x, y: cmd.y });
+          }
         }
         break;
       }
@@ -160,8 +176,9 @@ export function buildCuts(
         break;
       case 'show': {
         const ch = charByName.get(cmd.name);
+        const entity = resolve(cmd.name);
         const expression = cmd.expression ?? ch?.defaultExpression ?? 'default';
-        const existing = state.portraits.find((p) => p.characterName === cmd.name);
+        const existing = state.portraits.find((p) => p.characterName === entity);
         if (existing) {
           existing.expression = expression;
           if (cmd.position) existing.position = cmd.position;
@@ -170,7 +187,7 @@ export function buildCuts(
         } else {
           const position = cmd.position ?? freePosition(state.portraits);
           state.portraits.push({
-            characterName: cmd.name,
+            characterName: entity,
             expression,
             position,
             flipped: cmd.flip ?? autoFlip(ch, position),
@@ -178,29 +195,42 @@ export function buildCuts(
         }
         break;
       }
-      case 'hide':
-        state.portraits = state.portraits.filter((p) => p.characterName !== cmd.name);
+      case 'hide': {
+        const entity = resolve(cmd.name);
+        state.portraits = state.portraits.filter((p) => p.characterName !== entity);
         break;
+      }
       case 'damage':
       case 'heal': {
-        if (!state.params[cmd.name]) {
+        const entity = resolve(cmd.name);
+        if (!state.params[entity]) {
           warnings.push({ line: cmd.line, message: `「${cmd.name}」は未登録のキャラクターです（@${cmd.type} は無視されます）` });
           break;
         }
         const delta = cmd.type === 'damage' ? -cmd.amount : cmd.amount;
-        applyDelta(state.params[cmd.name], template.damageParamKey, delta);
+        applyDelta(state.params[entity], template.damageParamKey, delta);
+        // ポップ表示は脚本に書かれた名前のまま（村長→敵兵士のような文脈を尊重）
         pendingDamage = { characterName: cmd.name, amount: cmd.type === 'damage' ? cmd.amount : -cmd.amount };
         // ダメージ演出はそれ単体でも1カットにする（セリフなしでポップ表示）
         pushCut(null, cmd.line);
         break;
       }
       case 'set': {
-        const target = state.params[cmd.name];
+        const target = state.params[resolve(cmd.name)];
         if (!target) {
           warnings.push({ line: cmd.line, message: `「${cmd.name}」は未登録のキャラクターです（@set は無視されます。全体パラメータは @setglobal を使ってください）` });
           break;
         }
         setParam(target, cmd.param, cmd.value, template);
+        break;
+      }
+      case 'name': {
+        const ch = charByName.get(cmd.name);
+        if (!ch) {
+          warnings.push({ line: cmd.line, message: `「${cmd.name}」は未登録のキャラクターです（@name は無視されます）` });
+          break;
+        }
+        state.displayNames[ch.name] = cmd.newName;
         break;
       }
       case 'setglobal':
@@ -210,28 +240,29 @@ export function buildCuts(
         if (cmd.name && !charByName.has(cmd.name)) {
           warnings.push({ line: cmd.line, message: `「${cmd.name}」は未登録のキャラクターです（既定のダイスで表示します）` });
         }
-        pendingDice = { spec: cmd.spec, result: cmd.result, characterName: cmd.name };
+        pendingDice = { spec: cmd.spec, result: cmd.result, characterName: cmd.name ? resolve(cmd.name) : undefined };
         pushCut(null, cmd.line);
         break;
       case 'say': {
-        const ch = charByName.get(cmd.name);
+        const ch = charByName.get(cmd.name); // 別名（PL名など）でも解決される
         if (ch) {
           // 話者の立ち絵を自動表示・表情差分を自動差し替え。
           // 未表示なら空いている位置へ置く（複数人の言い合いで重ならないように）
           const expression = cmd.expression ?? ch.defaultExpression;
-          const existing = state.portraits.find((p) => p.characterName === cmd.name);
+          const existing = state.portraits.find((p) => p.characterName === ch.name);
           if (existing) {
             existing.expression = expression;
           } else {
             const position = freePosition(state.portraits);
             state.portraits.push({
-              characterName: cmd.name,
+              characterName: ch.name,
               expression,
               position,
               flipped: autoFlip(ch, position),
             });
           }
         }
+        // 話者プレートは脚本に書かれた名前をそのまま表示する
         pushCut({ speaker: cmd.name, text: cmd.text }, cmd.line);
         break;
       }

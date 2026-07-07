@@ -40,7 +40,7 @@ export function drawCut(
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
   drawBackground(ctx, cut, images);
-  if (cut.map) drawMap(ctx, cut.map, images, characters);
+  if (cut.map) drawMap(ctx, cut.map, images, characters, cut.displayNames);
   drawPortraits(ctx, cut, images, characters);
   if (cut.statusVisible) drawStatusBar(ctx, cut, images, characters, template);
   if (cut.dice) drawDice(ctx, cut.dice, images, characters, options);
@@ -85,7 +85,13 @@ function drawPortraits(
   characters: Character[],
 ): void {
   const charByName = new Map(characters.map((c) => [c.name, c]));
-  const isSpeaking = (name: string) => cut.message?.speaker === name;
+  // 話者名は脚本に書かれたまま（別名の可能性がある）なので登録名に解決して比較する
+  const speaker = cut.message
+    ? (characters.find(
+        (c) => c.name === cut.message!.speaker || c.aliases?.includes(cut.message!.speaker),
+      )?.name ?? cut.message.speaker)
+    : null;
+  const isSpeaking = (name: string) => speaker === name;
 
   for (const p of cut.portraits) {
     const ch = charByName.get(p.characterName);
@@ -133,10 +139,11 @@ function drawMap(
   map: MapState,
   images: ImageStore,
   characters: Character[],
+  displayNames: Record<string, string>,
 ): void {
   const geo = map.kind === 'image' ? drawImageMap(ctx, map, images) : drawLanesMap(ctx, map);
   if (!geo) return;
-  drawChips(ctx, map, images, characters, geo);
+  drawChips(ctx, map, images, characters, displayNames, geo);
   drawMarks(ctx, map, geo);
 }
 
@@ -249,6 +256,7 @@ function drawChips(
   map: MapState,
   images: ImageStore,
   characters: Character[],
+  displayNames: Record<string, string>,
   geo: MapGeometry,
 ): void {
   const charByName = new Map(characters.map((c) => [c.name, c]));
@@ -280,7 +288,7 @@ function drawChips(
       ctx.font = `bold ${Math.max(11, size * 0.32)}px ${FONT}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(chip.characterName.slice(0, 2), cx, cy);
+      ctx.fillText((displayNames[chip.characterName] ?? chip.characterName).slice(0, 2), cx, cy);
       ctx.restore();
     }
   }
@@ -418,11 +426,11 @@ function drawCharacterCell(
 
   const textX = x + pad + (showIcon ? iconSize + pad : 0);
   const textMaxW = x + w - textX - pad;
-  // 名前
+  // 名前（@name で変更された表示名があればそちら）
   ctx.fillStyle = '#fff';
   ctx.font = `bold ${nameFont}px ${FONT}`;
   ctx.textBaseline = 'top';
-  ctx.fillText(ch.name, textX, pad, textMaxW);
+  ctx.fillText(cut.displayNames[ch.name] ?? ch.name, textX, pad, textMaxW);
 
   // パラメータ
   const params = cut.paramsSnapshot[ch.name] ?? ch.params;

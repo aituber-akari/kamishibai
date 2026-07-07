@@ -144,6 +144,10 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
         return err('@chip の座標はマップに対する%（0-100）で「@chip 名前 25 40」のように指定します');
       return { type: 'chip', name: args[0], x, y, line };
     }
+    case 'name':
+      // 「@name モブ 村長」— ステータスバー等の恒常表示名をそのカット以降変更する
+      if (args.length < 2) return err('@name は「@name キャラ名 新表示名」の形式です');
+      return { type: 'name', name: args[0], newName: args.slice(1).join(' '), line };
     case 'status':
       if (args[0] !== 'on' && args[0] !== 'off') return err('@status は on か off を指定してください');
       return { type: 'status', visible: args[0] === 'on', line };

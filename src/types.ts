@@ -67,6 +67,12 @@ export interface Character {
    * 指定すると立ち絵・アイコン等の選択候補がこのフォルダ内に絞られる。未指定なら全素材
    */
   assetFolders?: string[];
+  /**
+   * 別名。脚本中でこの名前を使っても同じキャラとして解決される
+   * （例: PC国王の別名にPLPL1を登録し、ゲーム外パートは「PL1:」で書く）。
+   * 話者プレートには脚本に書いた名前がそのまま表示される
+   */
+  aliases?: string[];
 }
 
 // ============ 脚本コマンド ============
@@ -89,6 +95,7 @@ export type ScriptCommand =
   | { type: 'lane'; index: number; label?: string; state?: Lane['state']; line: number }
   | { type: 'chip'; name: string; x: number | null; y: number | null; line: number } // null = 撤去
   | { type: 'mark'; x: number; y: number; text: string | null; line: number } // null = 撤去
+  | { type: 'name'; name: string; newName: string; line: number } // 恒常表示名の変更
   | { type: 'status'; visible: boolean; line: number }
   | { type: 'wait'; seconds: number; line: number }
   | { type: 'say'; name: string; expression?: string; text: string; line: number };
@@ -169,6 +176,8 @@ export interface Cut {
   statusVisible: boolean;
   /** キャラ名 → パラメータのスナップショット */
   paramsSnapshot: Record<string, Record<string, ParamValue>>;
+  /** キャラ名（登録名）→ このカット時点の表示名（@name で変更される） */
+  displayNames: Record<string, string>;
   globalSnapshot: Record<string, ParamValue>;
   message: { speaker: string; text: string } | null;
   damagePopup: DamagePopup | null;

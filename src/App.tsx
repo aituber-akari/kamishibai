@@ -59,6 +59,9 @@ function normalizeProject(data: unknown): StoredProject | null {
       assetFolders: Array.isArray(c.assetFolders)
         ? c.assetFolders.filter((f): f is string => typeof f === 'string')
         : undefined,
+      aliases: Array.isArray(c.aliases)
+        ? c.aliases.filter((a): a is string => typeof a === 'string')
+        : undefined,
     }));
   return {
     script: d.script,
