@@ -3,10 +3,13 @@ import type { Asset } from '../hooks/useAssets';
 
 interface Props {
   assets: Map<string, Asset>;
+  /** IndexedDBからの復元中 */
+  restoring: boolean;
   onAddFiles: (files: FileList | File[]) => void;
   onAddDropped: (dt: DataTransfer) => void;
   onRemove: (name: string) => void;
   onRemoveFolder: (folder: string) => void;
+  onRemoveAll: () => void;
 }
 
 const KIND_ICON: Record<Asset['kind'], string> = { image: '🖼️', audio: '🎵', other: '📄' };
@@ -17,7 +20,15 @@ interface FolderGroup {
   thumb?: Asset;
 }
 
-export function AssetPanel({ assets, onAddFiles, onAddDropped, onRemove, onRemoveFolder }: Props) {
+export function AssetPanel({
+  assets,
+  restoring,
+  onAddFiles,
+  onAddDropped,
+  onRemove,
+  onRemoveFolder,
+  onRemoveAll,
+}: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -43,7 +54,25 @@ export function AssetPanel({ assets, onAddFiles, onAddDropped, onRemove, onRemov
 
   return (
     <section className="panel">
-      <h2>素材ライブラリ</h2>
+      <h2>
+        素材ライブラリ
+        <span className="panel-note">
+          {restoring ? '（前回の素材を復元中…）' : 'ブラウザに保存されます'}
+        </span>
+        {assets.size > 0 && (
+          <button
+            className="icon-button panel-header-button"
+            onClick={() => {
+              if (confirm('登録済みの素材をすべて削除しますか？（保存済みデータも消えます）')) {
+                onRemoveAll();
+              }
+            }}
+            title="全素材を削除"
+          >
+            すべて削除
+          </button>
+        )}
+      </h2>
       <div
         className={`drop-zone ${dragging ? 'dragging' : ''}`}
         onDragOver={(e) => {

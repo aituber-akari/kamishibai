@@ -79,6 +79,18 @@
   letter-spacing: 0.06em;
 }
 
+.panel-note {
+  font-weight: 400;
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.panel-header-button {
+  float: right;
+  font-size: 11px;
+}
+
 .panel h3 {
   margin: 12px 0 6px;
   font-size: 12px;

@@ -103,7 +103,8 @@ export default function App() {
     stored?.defaultDiceFolder,
   );
   const [fontFamily, setFontFamily] = useState<string | undefined>(stored?.fontFamily);
-  const { assets, imageStore, addFiles, addDropped, removeAsset, removeFolder } = useAssets();
+  const { assets, imageStore, restoring, addFiles, addDropped, removeAsset, removeFolder, removeAll } =
+    useAssets();
   const imageAssets = useMemo(
     () => [...assets.values()].filter((a) => a.kind === 'image'),
     [assets],
@@ -277,10 +278,12 @@ export default function App() {
             />
             <AssetPanel
               assets={assets}
+              restoring={restoring}
               onAddFiles={addFiles}
               onAddDropped={addDropped}
               onRemove={removeAsset}
               onRemoveFolder={removeFolder}
+              onRemoveAll={removeAll}
             />
           </div>
         </div>

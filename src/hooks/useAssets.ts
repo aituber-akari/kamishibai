@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { dbClearAssets, dbDeleteAsset, dbDeleteFolder, dbLoadAll, dbPutAssets } from '../lib/assetDb';
 
 export interface Asset {
   /** フォルダ構造を保った相対パス（例: dice/red/dice_01.png）。これが登録キー */
@@ -12,9 +13,9 @@ const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif)$/i;
 const AUDIO_EXT = /\.(mp3|wav|ogg|m4a|flac)$/i;
 const IGNORE_FILES = /^(Thumbs\.db|\.DS_Store|desktop\.ini)$/i;
 
-function kindOf(file: File): Asset['kind'] {
-  if (file.type.startsWith('image/') || IMAGE_EXT.test(file.name)) return 'image';
-  if (file.type.startsWith('audio/') || AUDIO_EXT.test(file.name)) return 'audio';
+function kindOf(file: Blob, path: string): Asset['kind'] {
+  if (file.type.startsWith('image/') || IMAGE_EXT.test(path)) return 'image';
+  if (file.type.startsWith('audio/') || AUDIO_EXT.test(path)) return 'audio';
   return 'other';
 }
 
@@ -48,22 +49,13 @@ async function collectFromEntry(entry: FileSystemEntry, out: NamedFile[]): Promi
 /**
  * PC上の素材ファイル（立ち絵・ダイス・背景・BGM・SE）をブラウザに読み込んで管理する。
  * フォルダごとの一括登録に対応し、フォルダ構造は相対パスとしてキーに保持する。
- * 現状はメモリ保持（M2でIndexedDB永続化予定）。
+ * 素材のBlobはIndexedDBに永続化され、次回起動時に自動復元される。
  */
 export function useAssets() {
   const [assets, setAssets] = useState<Map<string, Asset>>(new Map());
+  const [restoring, setRestoring] = useState(true);
 
-  const registerFiles = useCallback(async (files: NamedFile[]) => {
-    // 1ファイルの読み込み失敗（壊れた画像など）が他のファイルを巻き込まないよう
-    // allSettled で成功分だけ登録する
-    const results = await Promise.allSettled(files.map(({ file, path }) => loadAsset(file, path)));
-    const loaded: Asset[] = [];
-    const failed: string[] = [];
-    results.forEach((r, i) => {
-      if (r.status === 'fulfilled') loaded.push(r.value);
-      else failed.push(files[i]?.path ?? '(不明なファイル)');
-    });
-
+  const mergeLoaded = useCallback((loaded: Asset[]) => {
     setAssets((prev) => {
       const next = new Map(prev);
       for (const a of loaded) {
@@ -73,12 +65,58 @@ export function useAssets() {
       }
       return next;
     });
-    if (failed.length > 0) {
-      const head = failed.slice(0, 10).join('\n');
-      alert(`読み込めなかったファイルがあります (${failed.length}件):\n${head}${failed.length > 10 ? '\n…' : ''}`);
-    }
-    return loaded;
   }, []);
+
+  // 起動時にIndexedDBから全素材を復元する
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const stored = await dbLoadAll();
+        const results = await Promise.allSettled(
+          stored.map(({ name, blob }) => loadAsset(blob, name)),
+        );
+        if (cancelled) return;
+        mergeLoaded(results.filter((r) => r.status === 'fulfilled').map((r) => r.value));
+      } catch (e) {
+        // IndexedDBが使えない環境（プライベートモード等）ではメモリのみで運用する
+        console.warn('素材の復元に失敗しました。今セッションはメモリのみで動作します', e);
+      } finally {
+        if (!cancelled) setRestoring(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mergeLoaded]);
+
+  const registerFiles = useCallback(
+    async (files: NamedFile[]) => {
+      // 1ファイルの読み込み失敗（壊れた画像など）が他のファイルを巻き込まないよう
+      // allSettled で成功分だけ登録する
+      const results = await Promise.allSettled(files.map(({ file, path }) => loadAsset(file, path)));
+      const loaded: Asset[] = [];
+      const loadedBlobs: { name: string; blob: Blob }[] = [];
+      const failed: string[] = [];
+      results.forEach((r, i) => {
+        if (r.status === 'fulfilled') {
+          loaded.push(r.value);
+          loadedBlobs.push({ name: r.value.name, blob: files[i].file });
+        } else {
+          failed.push(files[i]?.path ?? '(不明なファイル)');
+        }
+      });
+
+      mergeLoaded(loaded);
+      dbPutAssets(loadedBlobs).catch((e) => console.warn('素材の永続化に失敗しました', e));
+      if (failed.length > 0) {
+        const head = failed.slice(0, 10).join('\n');
+        alert(`読み込めなかったファイルがあります (${failed.length}件):\n${head}${failed.length > 10 ? '\n…' : ''}`);
+      }
+      return loaded;
+    },
+    [mergeLoaded],
+  );
 
   /** input[type=file]（webkitdirectory含む）からの登録 */
   const addFiles = useCallback(
@@ -118,6 +156,7 @@ export function useAssets() {
       next.delete(name);
       return next;
     });
+    dbDeleteAsset(name).catch(() => {});
   }, []);
 
   /** フォルダ（プレフィックス）単位の一括削除 */
@@ -132,6 +171,16 @@ export function useAssets() {
       }
       return next;
     });
+    dbDeleteFolder(folder).catch(() => {});
+  }, []);
+
+  /** 全素材の削除（ライブラリのリセット） */
+  const removeAll = useCallback(() => {
+    setAssets((prev) => {
+      for (const a of prev.values()) URL.revokeObjectURL(a.url);
+      return new Map();
+    });
+    dbClearAssets().catch(() => {});
   }, []);
 
   /** 描画用: 画像アセットだけの Map */
@@ -154,12 +203,22 @@ export function useAssets() {
     return [...folders].sort();
   }, [assets]);
 
-  return { assets, imageStore, imageFolders, addFiles, addDropped, removeAsset, removeFolder };
+  return {
+    assets,
+    imageStore,
+    imageFolders,
+    restoring,
+    addFiles,
+    addDropped,
+    removeAsset,
+    removeFolder,
+    removeAll,
+  };
 }
 
-async function loadAsset(file: File, path: string): Promise<Asset> {
+async function loadAsset(file: Blob, path: string): Promise<Asset> {
   const url = URL.createObjectURL(file);
-  const asset: Asset = { name: path, kind: kindOf(file), url };
+  const asset: Asset = { name: path, kind: kindOf(file, path), url };
   if (asset.kind === 'image') {
     try {
       asset.image = await loadImage(url);
