@@ -110,8 +110,8 @@ export type ScriptCommand =
   | { type: 'chip'; name: string; x: number | null; y: number | null; line: number } // null = 撤去
   | { type: 'mark'; x: number; y: number; text: string | null; line: number } // null = 撤去
   | { type: 'name'; name: string; newName: string; line: number } // 恒常表示名の変更
-  | { type: 'fadeout'; seconds: number; line: number } // 画面の暗転（それ自体が1カット）
-  | { type: 'fadein'; seconds: number; line: number } // 次のカットを暗転から明転で始める
+  | { type: 'fadeout'; seconds: number; color: string; line: number } // 画面のフェード（それ自体が1カット）
+  | { type: 'fadein'; seconds: number; color: string; line: number } // 次のカットをフェード明けで始める
   | { type: 'status'; visible: boolean; line: number }
   | { type: 'wait'; seconds: number; line: number }
   | { type: 'say'; name: string; expression?: string; text: string; line: number };
@@ -216,10 +216,14 @@ export interface Cut {
   dice: DiceEffect | null;
   /** 表示時間（秒）。wait 指定がなければ再生側の既定値 */
   waitSeconds: number | null;
-  /** カット冒頭を暗転から明転させる秒数（@fadein） */
+  /** カット冒頭をフェード明けで始める秒数（@fadein） */
   fadeInSeconds: number | null;
-  /** カット全体を暗転演出にする秒数（@fadeout。waitSeconds と同じ値になる） */
+  /** フェードインの色（black/white/#rrggbb） */
+  fadeInColor: string | null;
+  /** カット全体をフェード演出にする秒数（@fadeout。waitSeconds と同じ値になる） */
   fadeOutSeconds: number | null;
+  /** フェードアウトの色（black/white/#rrggbb） */
+  fadeOutColor: string | null;
 }
 
 // ============ プロジェクト ============

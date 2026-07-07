@@ -57,20 +57,36 @@ export function drawCut(
   drawSceneFade(ctx, cut, options);
 }
 
-/** シーン切替の暗転・明転（@fadeout / @fadein）。黒オーバーレイの透過率を時刻から決める */
+/** フェード色（black/white/#rrggbb）→ RGB値 */
+function fadeRgb(color: string | null): string {
+  if (color === 'white') return '255, 255, 255';
+  if (color && /^#[0-9a-fA-F]{6}$/.test(color)) {
+    const n = parseInt(color.slice(1), 16);
+    return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+  }
+  return '0, 0, 0';
+}
+
+/** シーン切替のフェード（@fadeout / @fadein）。オーバーレイの透過率を時刻から決める */
 function drawSceneFade(ctx: CanvasRenderingContext2D, cut: Cut, options: DrawOptions): void {
   const t = options.timeInCut ?? Infinity;
   let alpha = 0;
+  let color = cut.fadeOutColor ?? cut.fadeInColor;
   if (cut.fadeOutSeconds) {
-    // 暗転カット: カット全体をかけて 0 → 1（時刻指定なしの静止表示は真っ黒＝完了状態）
+    // フェードアウトカット: カット全体をかけて 0 → 1（時刻指定なしの静止表示は完了状態）
     alpha = Math.max(alpha, Math.min(1, t / cut.fadeOutSeconds));
+    color = cut.fadeOutColor;
   }
   if (cut.fadeInSeconds && t < cut.fadeInSeconds) {
-    alpha = Math.max(alpha, 1 - t / cut.fadeInSeconds);
+    const inAlpha = 1 - t / cut.fadeInSeconds;
+    if (inAlpha > alpha) {
+      alpha = inAlpha;
+      color = cut.fadeInColor;
+    }
   }
   if (alpha > 0) {
     ctx.save();
-    ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
+    ctx.fillStyle = `rgba(${fadeRgb(color)}, ${alpha})`;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.restore();
   }

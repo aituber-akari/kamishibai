@@ -74,10 +74,10 @@ export function buildCuts(
   let pendingWait: number | null = null;
   // 直前BGMのフェードアウト（@bgm 切替/stop に fade 指定があったとき、次のカットに記録）
   let pendingBgmFadeOut: number | null = null;
-  // 次のカットを暗転から始める（@fadein）
-  let pendingFadeIn: number | null = null;
-  // このカット自体を暗転演出にする（@fadeout。pushCut 直前にのみ設定される）
-  let pendingFadeOut: number | null = null;
+  // 次のカットをフェード明けで始める（@fadein）
+  let pendingFadeIn: { seconds: number; color: string } | null = null;
+  // このカット自体をフェード演出にする（@fadeout。pushCut 直前にのみ設定される）
+  let pendingFadeOut: { seconds: number; color: string } | null = null;
 
   const pushCut = (message: Cut['message'], line: number) => {
     cuts.push({
@@ -97,8 +97,10 @@ export function buildCuts(
       damagePopup: pendingDamage,
       dice: pendingDice,
       waitSeconds: pendingWait,
-      fadeInSeconds: pendingFadeIn,
-      fadeOutSeconds: pendingFadeOut,
+      fadeInSeconds: pendingFadeIn?.seconds ?? null,
+      fadeInColor: pendingFadeIn?.color ?? null,
+      fadeOutSeconds: pendingFadeOut?.seconds ?? null,
+      fadeOutColor: pendingFadeOut?.color ?? null,
     });
     pendingSe = null;
     pendingDamage = null;
@@ -232,13 +234,13 @@ export function buildCuts(
         pendingWait = cmd.seconds;
         break;
       case 'fadeout':
-        // 暗転はそれ自体が1カット（現在のシーンが徐々に黒になる）
+        // フェードアウトはそれ自体が1カット（現在のシーンが徐々に指定色になる）
         pendingWait = cmd.seconds;
-        pendingFadeOut = cmd.seconds;
+        pendingFadeOut = { seconds: cmd.seconds, color: cmd.color };
         pushCut(null, cmd.line);
         break;
       case 'fadein':
-        pendingFadeIn = cmd.seconds;
+        pendingFadeIn = { seconds: cmd.seconds, color: cmd.color };
         break;
       case 'show': {
         const ch = charByName.get(cmd.name);

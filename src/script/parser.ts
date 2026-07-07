@@ -175,11 +175,24 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
       return { type: 'status', visible: args[0] === 'on', line };
     case 'fadeout':
     case 'fadein': {
-      // 「@fadeout [秒]」「@fadein [秒]」既定1秒。シーン切替の暗転・明転
-      const seconds = args[0] === undefined ? 1 : Number(args[0]);
-      if (!Number.isFinite(seconds) || seconds <= 0)
-        return err(`@${head} の秒数は正の数で指定してください`);
-      return { type: head, seconds, line };
+      // 「@fadeout [秒] [white|black|#rrggbb]」既定は1秒・黒。ホワイトアウトは white（白でも可）
+      let seconds = 1;
+      let color = 'black';
+      for (const a of args) {
+        if (Number.isFinite(Number(a))) {
+          seconds = Number(a);
+        } else if (a === 'white' || a === '白') {
+          color = 'white';
+        } else if (a === 'black' || a === '黒') {
+          color = 'black';
+        } else if (/^#[0-9a-fA-F]{6}$/.test(a)) {
+          color = a;
+        } else {
+          return err(`@${head}: 解釈できない指定です: ${a}（秒数 / white / black / #rrggbb）`);
+        }
+      }
+      if (seconds <= 0) return err(`@${head} の秒数は正の数で指定してください`);
+      return { type: head, seconds, color, line };
     }
     case 'wait': {
       const seconds = Number(args[0]);
