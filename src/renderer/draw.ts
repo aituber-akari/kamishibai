@@ -1,16 +1,30 @@
-import type { Character, Cut, GameTemplate, ParamValue } from '../types';
+import type { Character, Cut, DiceEffect, GameTemplate, ParamValue } from '../types';
 
 export const CANVAS_W = 1280;
 export const CANVAS_H = 720;
 
-/** アセット名（ファイル名）→ 読み込み済み画像 */
+/** アセット名（相対パス）→ 読み込み済み画像 */
 export type ImageStore = Map<string, HTMLImageElement>;
 
 const FONT = '"Hiragino Sans", "Noto Sans JP", sans-serif';
 
+/** ダイスが転がっている時間（秒）。これを過ぎると出目表示に落ち着く */
+export const DICE_ROLL_SECONDS = 1.0;
+const DICE_FRAME_SECONDS = 1 / 15;
+
+export interface DrawOptions {
+  /** カット表示開始からの経過秒。ダイスアニメ等の時間演出に使う（省略時は演出終了後の絵） */
+  timeInCut?: number;
+  /** キャラにダイスセット未設定のときに使うフォルダ */
+  defaultDiceFolder?: string;
+  /** false でダイスの連番アニメを行わず、即座に出目を表示する */
+  diceAnimation?: boolean;
+}
+
 /**
  * 1カットを Canvas に描画する純関数。
  * プレビューも mp4 書き出しも必ずこの関数を通す（見た目のズレを防ぐ）。
+ * 時間演出も timeInCut からの決定的な計算にする（書き出し時に再現できるように）。
  */
 export function drawCut(
   ctx: CanvasRenderingContext2D,
@@ -18,19 +32,33 @@ export function drawCut(
   images: ImageStore,
   characters: Character[],
   template: GameTemplate,
+  options: DrawOptions = {},
 ): void {
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
   drawBackground(ctx, cut, images);
   drawPortraits(ctx, cut, images, characters);
   if (cut.statusVisible) drawStatusBar(ctx, cut, images, characters, template);
-  if (cut.dice) drawDice(ctx, cut.dice);
+  if (cut.dice) drawDice(ctx, cut.dice, images, characters, options);
   if (cut.damagePopup) drawDamagePopup(ctx, cut.damagePopup);
   if (cut.message) drawMessageWindow(ctx, cut.message);
 }
 
+/**
+ * アセットの検索。完全一致のほか、フォルダ登録された素材を
+ * ファイル名だけで参照できるようにサフィックス一致も試す
+ */
+export function findImage(images: ImageStore, name: string): HTMLImageElement | undefined {
+  const exact = images.get(name);
+  if (exact) return exact;
+  for (const [key, img] of images) {
+    if (key.endsWith('/' + name)) return img;
+  }
+  return undefined;
+}
+
 function drawBackground(ctx: CanvasRenderingContext2D, cut: Cut, images: ImageStore): void {
-  const img = cut.bg ? images.get(cut.bg) : undefined;
+  const img = cut.bg ? findImage(images, cut.bg) : undefined;
   if (img) {
     // cover でアスペクト維持して全面に描画
     const scale = Math.max(CANVAS_W / img.width, CANVAS_H / img.height);
@@ -59,13 +87,14 @@ function drawPortraits(
     const ch = charByName.get(p.characterName);
     if (!ch) continue;
     const assetName = ch.portraits[p.expression] ?? ch.portraits[ch.defaultExpression];
-    const img = assetName ? images.get(assetName) : undefined;
+    const img = assetName ? findImage(images, assetName) : undefined;
     if (!img) continue;
 
-    // 高さ基準でスケール（画面の 72% の高さに収める）
-    const h = CANVAS_H * 0.72;
+    // 高さ基準で自動フィット（画面の72%）した上で、キャラごとの倍率・縦位置補正を掛ける。
+    // 素材の解像度がキャラごとにバラバラでも画面上のサイズを揃えられる
+    const h = CANVAS_H * 0.72 * (ch.portraitScale ?? 1);
     const w = (img.width / img.height) * h;
-    const y = CANVAS_H - h - 60; // メッセージウィンドウの上端付近まで
+    const y = CANVAS_H - h - 60 + (ch.portraitOffsetY ?? 0); // メッセージウィンドウの上端付近まで
     const x =
       p.position === 'left' ? 40 : p.position === 'right' ? CANVAS_W - w - 40 : (CANVAS_W - w) / 2;
 
@@ -142,7 +171,7 @@ function drawCharacterCell(
   const pad = 10;
   // 顔アイコン
   const iconSize = BAR_H - pad * 2;
-  const icon = ch.faceIcon ? images.get(ch.faceIcon) : undefined;
+  const icon = ch.faceIcon ? findImage(images, ch.faceIcon) : undefined;
   if (icon) {
     ctx.save();
     ctx.beginPath();
@@ -331,32 +360,87 @@ function drawDamagePopup(
   ctx.restore();
 }
 
-function drawDice(ctx: CanvasRenderingContext2D, dice: { spec: string; result: string }): void {
-  ctx.save();
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+/** フォルダ内の画像をファイル名順で返す（連番アニメのフレーム列） */
+export function diceFrames(images: ImageStore, folder: string | undefined): HTMLImageElement[] {
+  if (!folder) return [];
+  const keys = [...images.keys()].filter((k) => k.startsWith(folder + '/')).sort();
+  return keys.map((k) => images.get(k)!);
+}
+
+function drawDice(
+  ctx: CanvasRenderingContext2D,
+  dice: DiceEffect,
+  images: ImageStore,
+  characters: Character[],
+  options: DrawOptions,
+): void {
+  const ch = dice.characterName
+    ? characters.find((c) => c.name === dice.characterName)
+    : undefined;
+  const folder = ch?.diceFolder ?? options.defaultDiceFolder;
+  const frames = diceFrames(images, folder);
+
+  const t = options.timeInCut ?? Infinity;
+  const animate = (options.diceAnimation ?? true) && frames.length > 0;
+  const rolling = animate && t < DICE_ROLL_SECONDS;
+
   const cx = CANVAS_W / 2;
   const cy = CANVAS_H / 2 - 40;
 
-  // ダイス風の角丸四角
-  const size = 150;
-  ctx.fillStyle = '#fff';
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.roundRect(cx - size / 2, cy - size / 2, size, size, 24);
-  ctx.fill();
-  ctx.stroke();
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
 
-  ctx.fillStyle = '#16213e';
-  ctx.font = `bold 64px ${FONT}`;
-  ctx.fillText(dice.result, cx, cy + 4);
+  // ダイス数（2d6 → 2個。表示は最大4個まで）
+  const count = Math.min(4, Math.max(1, Number(dice.spec.match(/^(\d*)[dD]/)?.[1] || 1)));
+  const size = 130;
+  const gap = 20;
+  const totalW = count * size + (count - 1) * gap;
+
+  if (frames.length > 0) {
+    for (let i = 0; i < count; i++) {
+      // 各ダイスはフレーム位相をずらして「バラバラに転がっている」ように見せる。
+      // 時間からの決定的な計算なので書き出し時も同じ絵になる
+      const frame = rolling
+        ? frames[(Math.floor(t / DICE_FRAME_SECONDS) + i * 7) % frames.length]
+        : frames[(i * 7 + 3) % frames.length];
+      const x = cx - totalW / 2 + i * (size + gap);
+      const bounce = rolling ? -Math.abs(Math.sin((t * 6 + i) * Math.PI)) * 24 : 0;
+      const scale = size / Math.max(frame.width, frame.height);
+      const w = frame.width * scale;
+      const h = frame.height * scale;
+      ctx.drawImage(frame, x + (size - w) / 2, cy - size / 2 + (size - h) / 2 + bounce, w, h);
+    }
+  }
+
+  // 出目（転がり終わったら表示。素材がない場合は従来の角丸ダイス）
+  if (!rolling) {
+    if (frames.length === 0) {
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.roundRect(cx - 75, cy - 75, 150, 150, 24);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#16213e';
+      ctx.font = `bold 64px ${FONT}`;
+      ctx.fillText(dice.result, cx, cy + 4);
+    } else {
+      ctx.font = `bold 84px ${FONT}`;
+      ctx.lineWidth = 10;
+      ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+      ctx.strokeText(dice.result, cx, cy + size / 2 + 70);
+      ctx.fillStyle = '#ffd94d';
+      ctx.fillText(dice.result, cx, cy + size / 2 + 70);
+    }
+  }
 
   ctx.font = `bold 26px ${FONT}`;
   ctx.lineWidth = 6;
   ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-  ctx.strokeText(dice.spec, cx, cy - size / 2 - 30);
+  ctx.strokeText(dice.spec, cx, cy - size / 2 - 40);
   ctx.fillStyle = '#fff';
-  ctx.fillText(dice.spec, cx, cy - size / 2 - 30);
+  ctx.fillText(dice.spec, cx, cy - size / 2 - 40);
   ctx.restore();
 }

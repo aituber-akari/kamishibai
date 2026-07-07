@@ -15,6 +15,10 @@ const STORAGE_KEY = 'kamishibai-project-v1';
 interface StoredProject {
   script: string;
   characters: Character[];
+  /** ダイスの連番アニメを再生するか（既定 true） */
+  diceAnimation?: boolean;
+  /** キャラにダイスセット未設定のときに使う素材フォルダ */
+  defaultDiceFolder?: string;
 }
 
 function loadStored(): StoredProject | null {
@@ -44,8 +48,16 @@ function normalizeProject(data: unknown): StoredProject | null {
       faceIcon: typeof c.faceIcon === 'string' ? c.faceIcon : undefined,
       params: c.params && typeof c.params === 'object' ? c.params : {},
       showInStatusBar: c.showInStatusBar !== false,
+      portraitScale: typeof c.portraitScale === 'number' ? c.portraitScale : undefined,
+      portraitOffsetY: typeof c.portraitOffsetY === 'number' ? c.portraitOffsetY : undefined,
+      diceFolder: typeof c.diceFolder === 'string' ? c.diceFolder : undefined,
     }));
-  return { script: d.script, characters };
+  return {
+    script: d.script,
+    characters,
+    diceAnimation: d.diceAnimation !== false,
+    defaultDiceFolder: typeof d.defaultDiceFolder === 'string' ? d.defaultDiceFolder : undefined,
+  };
 }
 
 /** プロジェクトファイル（.kamishibai.json）の形式 */
@@ -59,19 +71,27 @@ export default function App() {
   const stored = useMemo(loadStored, []);
   const [script, setScript] = useState(stored?.script ?? SAMPLE_SCRIPT);
   const [characters, setCharacters] = useState<Character[]>(stored?.characters ?? []);
-  const { assets, imageStore, addFiles, removeAsset } = useAssets();
+  const [diceAnimation, setDiceAnimation] = useState(stored?.diceAnimation !== false);
+  const [defaultDiceFolder, setDefaultDiceFolder] = useState<string | undefined>(
+    stored?.defaultDiceFolder,
+  );
+  const { assets, imageStore, imageFolders, addFiles, addDropped, removeAsset, removeFolder } =
+    useAssets();
 
   // 脚本とキャラ設定は localStorage に自動保存（素材はM2でIndexedDB対応予定）
   useEffect(() => {
     const t = setTimeout(() => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ script, characters }));
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ script, characters, diceAnimation, defaultDiceFolder }),
+        );
       } catch {
         // quota超過などで保存できなくても編集は続行できる（ファイル書き出しは可能）
       }
     }, 500);
     return () => clearTimeout(t);
-  }, [script, characters]);
+  }, [script, characters, diceAnimation, defaultDiceFolder]);
 
   const globalParams = useMemo(() => {
     const params: Record<string, ParamValue> = {};
@@ -89,7 +109,14 @@ export default function App() {
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const exportProject = () => {
-    const file: ProjectFile = { format: 'kamishibai-project', version: 1, script, characters };
+    const file: ProjectFile = {
+      format: 'kamishibai-project',
+      version: 1,
+      script,
+      characters,
+      diceAnimation,
+      defaultDiceFolder,
+    };
     const blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -110,6 +137,8 @@ export default function App() {
       }
       setScript(project.script);
       setCharacters(project.characters);
+      setDiceAnimation(project.diceAnimation !== false);
+      setDefaultDiceFolder(project.defaultDiceFolder);
     } catch {
       alert('プロジェクトファイルを読み込めませんでした');
     }
@@ -131,6 +160,26 @@ export default function App() {
         <h1>kamishibai</h1>
         <span className="subtitle">TRPGリプレイ動画クリエイター — {template.name}</span>
         <div className="header-actions">
+          <label className="inline-checkbox" title="OFFにするとダイスは転がらず出目だけ表示します">
+            <input
+              type="checkbox"
+              checked={diceAnimation}
+              onChange={(e) => setDiceAnimation(e.target.checked)}
+            />
+            ダイスアニメ
+          </label>
+          <select
+            value={defaultDiceFolder ?? ''}
+            onChange={(e) => setDefaultDiceFolder(e.target.value || undefined)}
+            title="キャラにダイスセット未設定のときに使う素材フォルダ"
+          >
+            <option value="">既定ダイス（内蔵）</option>
+            {imageFolders.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
           <button onClick={exportProject}>保存（書き出し）</button>
           <button onClick={() => importInputRef.current?.click()}>開く（読み込み）</button>
           <input
@@ -174,15 +223,24 @@ export default function App() {
             template={template}
             images={imageStore}
             assets={assets}
+            defaultDiceFolder={defaultDiceFolder}
+            diceAnimation={diceAnimation}
           />
           <div className="bottom-panels">
             <CharacterPanel
               characters={characters}
               template={template}
               assets={assets}
+              imageFolders={imageFolders}
               onChange={setCharacters}
             />
-            <AssetPanel assets={assets} onAddFiles={addFiles} onRemove={removeAsset} />
+            <AssetPanel
+              assets={assets}
+              onAddFiles={addFiles}
+              onAddDropped={addDropped}
+              onRemove={removeAsset}
+              onRemoveFolder={removeFolder}
+            />
           </div>
         </div>
       </main>

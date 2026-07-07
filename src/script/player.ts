@@ -140,7 +140,10 @@ export function buildCuts(
         setParam(state.globals, cmd.param, cmd.value, template);
         break;
       case 'dice':
-        pendingDice = { spec: cmd.spec, result: cmd.result };
+        if (cmd.name && !charByName.has(cmd.name)) {
+          warnings.push({ line: cmd.line, message: `「${cmd.name}」は未登録のキャラクターです（既定のダイスで表示します）` });
+        }
+        pendingDice = { spec: cmd.spec, result: cmd.result, characterName: cmd.name };
         pushCut(null, cmd.line);
         break;
       case 'say': {

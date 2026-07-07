@@ -26,3 +26,16 @@ dist-ssr
 # スクリーンショット・参考画像
 スクリーンショット*.png
 *.mp4
+
+# ユーザー素材（立ち絵・ダイス・音声など）は絶対にコミットしない
+素材*/
+materials/
+assets-local/
+*.mpi
+Thumbs.db
+*.wav
+*.mp3
+*.ogg
+
+# 動作確認用の一時ファイル
+public/__test_dice/

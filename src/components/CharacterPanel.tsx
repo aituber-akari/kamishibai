@@ -6,6 +6,8 @@ interface Props {
   characters: Character[];
   template: GameTemplate;
   assets: Map<string, Asset>;
+  /** 画像を含むフォルダ一覧（ダイスセット選択用） */
+  imageFolders: string[];
   onChange: (characters: Character[]) => void;
 }
 
@@ -23,7 +25,7 @@ export function defaultParams(template: GameTemplate): Record<string, ParamValue
   return params;
 }
 
-export function CharacterPanel({ characters, template, assets, onChange }: Props) {
+export function CharacterPanel({ characters, template, assets, imageFolders, onChange }: Props) {
   const [newName, setNewName] = useState('');
   const imageAssets = [...assets.values()].filter((a) => a.kind === 'image');
 
@@ -69,6 +71,7 @@ export function CharacterPanel({ characters, template, assets, onChange }: Props
             ch={ch}
             template={template}
             imageAssets={imageAssets}
+            imageFolders={imageFolders}
             onUpdate={(patch) => update(ch.id, patch)}
             onRemove={() => onChange(characters.filter((c) => c.id !== ch.id))}
           />
@@ -85,12 +88,14 @@ function CharacterCard({
   ch,
   template,
   imageAssets,
+  imageFolders,
   onUpdate,
   onRemove,
 }: {
   ch: Character;
   template: GameTemplate;
   imageAssets: Asset[];
+  imageFolders: string[];
   onUpdate: (patch: Partial<Character>) => void;
   onRemove: () => void;
 }) {
@@ -162,6 +167,40 @@ function CharacterCard({
           {imageAssets.map((a) => (
             <option key={a.name} value={a.name}>
               {a.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <h3>表示調整</h3>
+      <div className="row">
+        <span className="row-label">立ち絵倍率</span>
+        <input
+          type="number"
+          step={0.05}
+          min={0.1}
+          max={3}
+          value={ch.portraitScale ?? 1}
+          onChange={(e) => onUpdate({ portraitScale: Number(e.target.value) || 1 })}
+        />
+        <span className="row-label">縦位置(px)</span>
+        <input
+          type="number"
+          step={10}
+          value={ch.portraitOffsetY ?? 0}
+          onChange={(e) => onUpdate({ portraitOffsetY: Number(e.target.value) || 0 })}
+        />
+      </div>
+      <div className="row">
+        <span className="row-label">ダイスセット</span>
+        <select
+          value={ch.diceFolder ?? ''}
+          onChange={(e) => onUpdate({ diceFolder: e.target.value || undefined })}
+        >
+          <option value="">（プロジェクト既定）</option>
+          {imageFolders.map((f) => (
+            <option key={f} value={f}>
+              {f}
             </option>
           ))}
         </select>

@@ -90,9 +90,17 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
     case 'setglobal':
       if (args.length < 2) return err('@setglobal は「@setglobal パラメータ 値」の形式です');
       return { type: 'setglobal', param: args[0], value: args.slice(1).join(' '), line };
-    case 'dice':
-      if (args.length < 2) return err('@dice は「@dice 2d6 出目」の形式です');
-      return { type: 'dice', spec: args[0], result: args.slice(1).join(' '), line };
+    case 'dice': {
+      // 「@dice 2d6 8」または「@dice キャラ名 2d6 8」
+      if (args.length < 2) return err('@dice は「@dice [キャラ名] 2d6 出目」の形式です');
+      const isSpec = (s: string) => /^\d*[dD]\d+/.test(s);
+      if (isSpec(args[0])) {
+        return { type: 'dice', spec: args[0], result: args.slice(1).join(' '), line };
+      }
+      if (args.length < 3 || !isSpec(args[1]))
+        return err('@dice は「@dice [キャラ名] 2d6 出目」の形式です（ダイス指定は 2d6 のような形式）');
+      return { type: 'dice', name: args[0], spec: args[1], result: args.slice(2).join(' '), line };
+    }
     case 'status':
       if (args[0] !== 'on' && args[0] !== 'off') return err('@status は on か off を指定してください');
       return { type: 'status', visible: args[0] === 'on', line };

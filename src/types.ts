@@ -45,6 +45,15 @@ export interface Character {
   params: Record<string, ParamValue>;
   /** ステータスバーに表示するか */
   showInStatusBar: boolean;
+  /**
+   * 立ち絵の表示倍率（既定 1.0）。
+   * 素材はキャラごとに解像度がバラバラなので、基準サイズに自動フィット後この倍率を掛ける
+   */
+  portraitScale?: number;
+  /** 立ち絵の縦位置オフセット（px、正で下へ） */
+  portraitOffsetY?: number;
+  /** このキャラのダイスアニメに使う素材フォルダ（未設定ならプロジェクト既定） */
+  diceFolder?: string;
 }
 
 // ============ 脚本コマンド ============
@@ -61,7 +70,7 @@ export type ScriptCommand =
   | { type: 'heal'; name: string; amount: number; line: number }
   | { type: 'set'; name: string; param: string; value: string; line: number }
   | { type: 'setglobal'; param: string; value: string; line: number }
-  | { type: 'dice'; spec: string; result: string; line: number }
+  | { type: 'dice'; name?: string; spec: string; result: string; line: number }
   | { type: 'status'; visible: boolean; line: number }
   | { type: 'wait'; seconds: number; line: number }
   | { type: 'say'; name: string; expression?: string; text: string; line: number };
@@ -93,6 +102,8 @@ export interface DamagePopup {
 export interface DiceEffect {
   spec: string;
   result: string;
+  /** 振ったキャラクター（ダイスセットの選択に使う） */
+  characterName?: string;
 }
 
 /** 1カット = プレビュー/動画の1画面ぶんの完全な描画状態 */

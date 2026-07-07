@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Character, Cut, GameTemplate } from '../types';
-import { CANVAS_W, CANVAS_H, drawCut, type ImageStore } from '../renderer/draw';
+import {
+  CANVAS_W,
+  CANVAS_H,
+  DICE_ROLL_SECONDS,
+  drawCut,
+  type ImageStore,
+} from '../renderer/draw';
 import { DEFAULT_CUT_SECONDS } from '../script/player';
 import type { Asset } from '../hooks/useAssets';
 
@@ -10,9 +16,21 @@ interface Props {
   template: GameTemplate;
   images: ImageStore;
   assets: Map<string, Asset>;
+  /** キャラにダイスセット未設定のときに使うフォルダ */
+  defaultDiceFolder?: string;
+  /** false でダイス連番アニメを行わない */
+  diceAnimation: boolean;
 }
 
-export function PreviewPane({ cuts, characters, template, images, assets }: Props) {
+export function PreviewPane({
+  cuts,
+  characters,
+  template,
+  images,
+  assets,
+  defaultDiceFolder,
+  diceAnimation,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -27,13 +45,11 @@ export function PreviewPane({ cuts, characters, template, images, assets }: Prop
     setIndex((i) => Math.min(i, Math.max(0, cuts.length - 1)));
   }, [cuts.length]);
 
-  // 描画
+  // 描画。ダイスカットはカット表示開始からの経過時間で連番アニメを回す
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d');
     if (!ctx) return;
-    if (cut) {
-      drawCut(ctx, cut, images, characters, template);
-    } else {
+    if (!cut) {
       ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
       ctx.fillStyle = '#101220';
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
@@ -41,8 +57,25 @@ export function PreviewPane({ cuts, characters, template, images, assets }: Prop
       ctx.font = '24px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('脚本を書くとここにプレビューが表示されます', CANVAS_W / 2, CANVAS_H / 2);
+      return;
     }
-  }, [cut, images, characters, template]);
+
+    const options = { defaultDiceFolder, diceAnimation };
+    if (!cut.dice || !diceAnimation) {
+      drawCut(ctx, cut, images, characters, template, options);
+      return;
+    }
+
+    let raf = 0;
+    const start = performance.now();
+    const tick = () => {
+      const t = (performance.now() - start) / 1000;
+      drawCut(ctx, cut, images, characters, template, { ...options, timeInCut: t });
+      if (t < DICE_ROLL_SECONDS + 0.1) raf = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(raf);
+  }, [cut, images, characters, template, defaultDiceFolder, diceAnimation]);
 
   // BGM / SE
   // cut オブジェクトは脚本の再パースで毎回作り直されるため、参照ではなく
