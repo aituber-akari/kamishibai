@@ -1,32 +1,46 @@
-# React + TypeScript + Vite
+# kamishibai
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+TRPGリプレイ動画（紙芝居動画）クリエイター。
+紙芝居クリエーターで手作業していた立ち絵・メッセージウィンドウ・ステータス表示の組み立てを、
+テキスト脚本から自動生成するWebアプリです。まずは迷宮キングダム向け。
 
-Currently, two official plugins are available:
+## 起動
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```sh
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## 使い方
+
+1. **素材ライブラリ**に立ち絵・背景・BGM・SEのファイルをドラッグ&ドロップ
+2. **キャラクター**を追加し、表情差分の画像とパラメータ初期値（HP/気力/配下/状態）を設定
+3. **脚本**を書くと右側にプレビューが組み上がる
+
+### 脚本の記法
+
+```
+@bg 洞窟.png              # 背景変更
+@bgm 戦闘.mp3             # BGM（@bgm stop で停止）
+@se ダイス.wav            # 効果音
+@show 名前 表情 left      # 立ち絵表示（セリフを書けば自動表示されるので通常は不要）
+@hide 名前                # 立ち絵消去
+@damage 名前 5            # ダメージ → ステータスバーのHPに自動反映＋ポップ演出
+@heal 名前 3              # 回復
+@set 名前 状態 肥満       # 任意パラメータ変更
+@dice 2d6 8               # ダイス演出
+@status off               # ステータスバー表示切替
+@wait 1.5                 # 表示時間（秒）
+
+名前: セリフ              # 1カット。立ち絵は自動表示
+名前(笑顔): セリフ        # 表情差分を自動差し替え
+```
+
+設計の詳細は [docs/DESIGN.md](docs/DESIGN.md) を参照。
+
+## ロードマップ
+
+- [x] M1: 脚本→プレビュー、キャラDB、ダメージ自動処理
+- [ ] M2: BGM/SE本格対応、ダイス連続絵アニメ、素材のIndexedDB永続化
+- [ ] M3: mp4書き出し（WebCodecs）
+- [ ] M4: レイアウト編集、ゲームテンプレートエディタ（迷キン以外への対応）
