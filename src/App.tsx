@@ -54,6 +54,7 @@ function normalizeProject(data: unknown): StoredProject | null {
       faceIconScale: typeof c.faceIconScale === 'number' ? c.faceIconScale : undefined,
       chipImage: typeof c.chipImage === 'string' ? c.chipImage : undefined,
       chipScale: typeof c.chipScale === 'number' ? c.chipScale : undefined,
+      flipOnRight: c.flipOnRight === true,
     }));
   return {
     script: d.script,

@@ -68,11 +68,14 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
       const rest = args.slice(1);
       let position: StagePosition | undefined;
       let expression: string | undefined;
+      let flip: boolean | undefined;
       for (const a of rest) {
         if ((POSITIONS as string[]).includes(a)) position = a as StagePosition;
+        else if (a === 'flip') flip = true;
+        else if (a === 'noflip') flip = false;
         else expression = a;
       }
-      return { type: 'show', name: args[0], expression, position, line };
+      return { type: 'show', name: args[0], expression, position, flip, line };
     }
     case 'hide':
       if (!args[0]) return err('@hide にはキャラクター名が必要です');

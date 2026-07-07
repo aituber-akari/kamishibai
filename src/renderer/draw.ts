@@ -102,11 +102,16 @@ function drawPortraits(
     const x =
       p.position === 'left' ? 40 : p.position === 'right' ? CANVAS_W - w - 40 : (CANVAS_W - w) / 2;
 
-    // 発言中でないキャラは少し暗く
-    if (cut.message && !isSpeaking(p.characterName)) {
-      ctx.drawImage(darkened(img), x, y, w, h);
+    // 発言中でないキャラは少し暗く。flipped なら左右反転（向かい合わせの演出）
+    const source = cut.message && !isSpeaking(p.characterName) ? darkened(img) : img;
+    if (p.flipped) {
+      ctx.save();
+      ctx.translate(x + w / 2, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(source, -w / 2, y, w, h);
+      ctx.restore();
     } else {
-      ctx.drawImage(img, x, y, w, h);
+      ctx.drawImage(source, x, y, w, h);
     }
   }
 }

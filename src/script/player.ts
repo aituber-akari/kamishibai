@@ -165,11 +165,15 @@ export function buildCuts(
         if (existing) {
           existing.expression = expression;
           if (cmd.position) existing.position = cmd.position;
+          if (cmd.flip !== undefined) existing.flipped = cmd.flip;
+          else if (cmd.position) existing.flipped = autoFlip(ch, existing.position);
         } else {
+          const position = cmd.position ?? freePosition(state.portraits);
           state.portraits.push({
             characterName: cmd.name,
             expression,
-            position: cmd.position ?? 'left',
+            position,
+            flipped: cmd.flip ?? autoFlip(ch, position),
           });
         }
         break;
@@ -212,11 +216,21 @@ export function buildCuts(
       case 'say': {
         const ch = charByName.get(cmd.name);
         if (ch) {
-          // 話者の立ち絵を自動表示・表情差分を自動差し替え
+          // 話者の立ち絵を自動表示・表情差分を自動差し替え。
+          // 未表示なら空いている位置へ置く（複数人の言い合いで重ならないように）
           const expression = cmd.expression ?? ch.defaultExpression;
           const existing = state.portraits.find((p) => p.characterName === cmd.name);
-          if (existing) existing.expression = expression;
-          else state.portraits.push({ characterName: cmd.name, expression, position: 'left' });
+          if (existing) {
+            existing.expression = expression;
+          } else {
+            const position = freePosition(state.portraits);
+            state.portraits.push({
+              characterName: cmd.name,
+              expression,
+              position,
+              flipped: autoFlip(ch, position),
+            });
+          }
         }
         pushCut({ speaker: cmd.name, text: cmd.text }, cmd.line);
         break;
@@ -225,6 +239,20 @@ export function buildCuts(
   }
 
   return { cuts, warnings };
+}
+
+/** 空いている立ち位置を選ぶ（左→右→中央の順） */
+function freePosition(portraits: PortraitState[]): PortraitState['position'] {
+  const used = new Set(portraits.map((p) => p.position));
+  for (const pos of ['left', 'right', 'center'] as const) {
+    if (!used.has(pos)) return pos;
+  }
+  return 'center';
+}
+
+/** キャラ設定「右側で自動反転」の適用 */
+function autoFlip(ch: Character | undefined, position: PortraitState['position']): boolean {
+  return !!ch?.flipOnRight && position === 'right';
 }
 
 function applyDelta(

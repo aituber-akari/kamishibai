@@ -60,6 +60,8 @@ export interface Character {
   chipImage?: string;
   /** キャラチップの表示倍率（既定 1.0） */
   chipScale?: number;
+  /** 右側配置のとき立ち絵を自動で左右反転する（左向き素材を向かい合わせにする用） */
+  flipOnRight?: boolean;
 }
 
 // ============ 脚本コマンド ============
@@ -70,7 +72,7 @@ export type ScriptCommand =
   | { type: 'bg'; asset: string; line: number }
   | { type: 'bgm'; asset: string | null; line: number } // null = stop
   | { type: 'se'; asset: string; line: number }
-  | { type: 'show'; name: string; expression?: string; position?: StagePosition; line: number }
+  | { type: 'show'; name: string; expression?: string; position?: StagePosition; flip?: boolean; line: number }
   | { type: 'hide'; name: string; line: number }
   | { type: 'damage'; name: string; amount: number; line: number }
   | { type: 'heal'; name: string; amount: number; line: number }
@@ -103,6 +105,8 @@ export interface PortraitState {
   /** このカットで使う表情 */
   expression: string;
   position: StagePosition;
+  /** 左右反転して表示（向かい合わせの演出用） */
+  flipped?: boolean;
 }
 
 export interface DamagePopup {

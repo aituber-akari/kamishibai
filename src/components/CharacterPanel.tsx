@@ -207,6 +207,16 @@ function CharacterCard({
 
       <h3>表示調整</h3>
       <div className="row">
+        <label className="inline-checkbox">
+          <input
+            type="checkbox"
+            checked={ch.flipOnRight ?? false}
+            onChange={(e) => onUpdate({ flipOnRight: e.target.checked })}
+          />
+          右側配置で左右反転（向かい合わせ用）
+        </label>
+      </div>
+      <div className="row">
         <span className="row-label">立ち絵倍率</span>
         <input
           type="number"
