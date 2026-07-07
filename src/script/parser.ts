@@ -194,6 +194,26 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
       if (seconds <= 0) return err(`@${head} の秒数は正の数で指定してください`);
       return { type: head, seconds, color, line };
     }
+    case 'still': {
+      // 「@still 画像 [音声] [秒] [背景色]」一枚絵の全画面表示。「@still off」で解除。
+      // 音声を指定し秒を省略すると、カットの長さが音声の長さになる
+      if (!args[0]) return err('@still は「@still 画像 [音声] [秒] [背景色]」または「@still off」の形式です');
+      if (args[0] === 'off') return { type: 'still', asset: null, bgColor: 'white', line };
+      let audio: string | undefined;
+      let seconds: number | undefined;
+      let bgColor = 'white';
+      for (const a of args.slice(1)) {
+        if (Number.isFinite(Number(a))) {
+          const n = Number(a);
+          if (n <= 0) return err('@still の秒数は正の数で指定してください');
+          seconds = n;
+        } else if (a === 'white' || a === '白') bgColor = 'white';
+        else if (a === 'black' || a === '黒') bgColor = 'black';
+        else if (/^#[0-9a-fA-F]{6}$/.test(a)) bgColor = a;
+        else audio = a;
+      }
+      return { type: 'still', asset: args[0], audio, seconds, bgColor, line };
+    }
     case 'wait': {
       const seconds = Number(args[0]);
       if (!Number.isFinite(seconds) || seconds <= 0) return err('@wait には正の秒数が必要です');

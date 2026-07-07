@@ -112,6 +112,9 @@ export type ScriptCommand =
   | { type: 'name'; name: string; newName: string; line: number } // 恒常表示名の変更
   | { type: 'fadeout'; seconds: number; color: string; line: number } // 画面のフェード（それ自体が1カット）
   | { type: 'fadein'; seconds: number; color: string; line: number } // 次のカットをフェード明けで始める
+  // 一枚絵（スチル）表示。ロゴ・タイトルカード・イベント絵など。asset null = 解除。
+  // audio指定時はカット尺が音声の長さになる
+  | { type: 'still'; asset: string | null; audio?: string; seconds?: number; bgColor: string; line: number }
   | { type: 'status'; visible: boolean; line: number }
   | { type: 'wait'; seconds: number; line: number }
   | { type: 'say'; name: string; expression?: string; text: string; line: number };
@@ -202,6 +205,11 @@ export interface Cut {
   /** このカットの頭で直前のBGMをフェードアウトさせる秒数（@bgm stop fade 等） */
   bgmFadeOutSeconds: number | null;
   se: SeState | null;
+  /**
+   * 一枚絵（スチル）。表示中は通常シーン（立ち絵・ステータスバー・メッセージ等）を
+   * 描かず、背景色＋中央配置の画像だけを描く。@still off まで持続する
+   */
+  still: { asset: string; bgColor: string } | null;
   /** 戦闘マップ／ダンジョンマップ（背景とは別レイヤー） */
   map: MapState | null;
   portraits: PortraitState[];

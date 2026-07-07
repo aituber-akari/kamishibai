@@ -47,6 +47,13 @@ export function drawCut(
 ): void {
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
+  // 一枚絵（スチル）表示中は通常シーンを描かず、背景色＋中央配置の画像のみ
+  if (cut.still) {
+    drawStill(ctx, cut.still, images);
+    drawSceneFade(ctx, cut, options);
+    return;
+  }
+
   drawBackground(ctx, cut, images);
   if (cut.map) drawMap(ctx, cut.map, images, characters, cut.displayNames, template);
   drawPortraits(ctx, cut, images, characters);
@@ -55,6 +62,22 @@ export function drawCut(
   if (cut.damagePopup) drawDamagePopup(ctx, cut.damagePopup);
   if (cut.message) drawMessageWindow(ctx, cut.message);
   drawSceneFade(ctx, cut, options);
+}
+
+/** 一枚絵（@still）: 指定背景色で塗りつぶし、画像を中央にアスペクト維持で収める */
+function drawStill(
+  ctx: CanvasRenderingContext2D,
+  still: { asset: string; bgColor: string },
+  images: ImageStore,
+): void {
+  ctx.fillStyle = `rgb(${fadeRgb(still.bgColor)})`;
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  const img = findImage(images, still.asset);
+  if (!img) return;
+  const scale = Math.min(CANVAS_W / img.width, CANVAS_H / img.height);
+  const w = img.width * scale;
+  const h = img.height * scale;
+  ctx.drawImage(img, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h);
 }
 
 /** フェード色（black/white/#rrggbb）→ RGB値 */

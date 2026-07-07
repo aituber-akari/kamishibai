@@ -95,6 +95,41 @@ describe('シーンのフェード（@fadeout / @fadein）', () => {
   });
 });
 
+describe('@still（一枚絵）とSE連動のカット尺', () => {
+  const duration = (name: string) => (name === 'jingle.wav' ? 3.2 : undefined);
+
+  it('@still は音声の長さがカット尺になり、@still off で通常シーンに戻る', () => {
+    const { commands, errors } = parseScript(
+      ['A: 開幕', '@still logo.png jingle.wav', '@still off', 'A: 本編'].join('\n'),
+    );
+    expect(errors).toEqual([]);
+    const { cuts, warnings } = buildCuts(commands, chars, mazeKingdomTemplate, {}, duration);
+    expect(warnings).toEqual([]);
+    expect(cuts).toHaveLength(3);
+    expect(cuts[1].still).toEqual({ asset: 'logo.png', bgColor: 'white' });
+    expect(cuts[1].waitSeconds).toBeCloseTo(3.2);
+    expect(cuts[1].se).toEqual({ asset: 'jingle.wav', volume: 1 });
+    expect(cuts[2].still).toBeNull();
+  });
+
+  it('@still の秒数明示は音声の長さより優先。長さ不明は警告して既定値', () => {
+    const { commands } = parseScript('@still logo.png jingle.wav 5');
+    const { cuts } = buildCuts(commands, chars, mazeKingdomTemplate, {}, duration);
+    expect(cuts[0].waitSeconds).toBe(5);
+
+    const r2 = buildCuts(parseScript('@still logo.png 不明.wav').commands, chars, mazeKingdomTemplate, {}, duration);
+    expect(r2.warnings).toHaveLength(1);
+    expect(r2.cuts[0].waitSeconds).toBeNull();
+  });
+
+  it('ダイスカットは直前の @se の長さに尺を合わせる', () => {
+    const { commands } = parseScript(['@se jingle.wav', '@dice 2d6 8'].join('\n'));
+    const { cuts } = buildCuts(commands, chars, mazeKingdomTemplate, {}, duration);
+    expect(cuts[0].dice).toMatchObject({ spec: '2d6', result: '8' });
+    expect(cuts[0].waitSeconds).toBeCloseTo(3.2);
+  });
+});
+
 describe('parser 音声オプション', () => {
   it('不正な音量・fade指定はエラーになる', () => {
     expect(parseScript('@bgm a.mp3 1.5').errors).toHaveLength(1);

@@ -25,6 +25,7 @@ interface FoldState {
   bgm: BgmState | null;
   statusVisible: boolean;
   map: MapState | null;
+  still: { asset: string; bgColor: string } | null;
   portraits: PortraitState[];
   params: Record<string, Record<string, ParamValue>>;
   globals: Record<string, ParamValue>;
@@ -42,6 +43,8 @@ export function buildCuts(
   characters: Character[],
   template: GameTemplate,
   globalParams: Record<string, ParamValue>,
+  /** 音声素材の長さ（秒）を引く関数。@still のカット尺自動設定に使う */
+  audioDuration?: (asset: string) => number | undefined,
 ): BuildResult {
   const warnings: ParseError[] = [];
   const state: FoldState = {
@@ -49,6 +52,7 @@ export function buildCuts(
     bgm: null,
     statusVisible: true,
     map: null,
+    still: null,
     portraits: [],
     params: Object.fromEntries(characters.map((c) => [c.name, structuredClone(c.params)])),
     globals: structuredClone(globalParams),
@@ -87,6 +91,7 @@ export function buildCuts(
       bgm: state.bgm ? { ...state.bgm } : null,
       bgmFadeOutSeconds: pendingBgmFadeOut,
       se: pendingSe,
+      still: state.still ? { ...state.still } : null,
       map: structuredClone(state.map),
       portraits: state.portraits.map((p) => ({ ...p })),
       statusVisible: state.statusVisible,
@@ -242,6 +247,31 @@ export function buildCuts(
       case 'fadein':
         pendingFadeIn = { seconds: cmd.seconds, color: cmd.color };
         break;
+      case 'still': {
+        if (cmd.asset === null) {
+          // 解除はカットを作らない（次のセリフ等から通常シーンに戻る）
+          state.still = null;
+          break;
+        }
+        state.still = { asset: cmd.asset, bgColor: cmd.bgColor };
+        if (cmd.audio) {
+          pendingSe = { asset: cmd.audio, volume: 1 };
+          if (cmd.seconds === undefined) {
+            const duration = audioDuration?.(cmd.audio);
+            if (duration === undefined) {
+              warnings.push({
+                line: cmd.line,
+                message: `「${cmd.audio}」の長さを取得できません（素材未登録？）。表示時間は既定値になります`,
+              });
+            } else {
+              pendingWait = duration;
+            }
+          }
+        }
+        if (cmd.seconds !== undefined) pendingWait = cmd.seconds;
+        pushCut(null, cmd.line);
+        break;
+      }
       case 'show': {
         const ch = charByName.get(cmd.name);
         const entity = resolve(cmd.name);
@@ -304,13 +334,20 @@ export function buildCuts(
       case 'setglobal':
         setParam(state.globals, cmd.param, cmd.value, template);
         break;
-      case 'dice':
+      case 'dice': {
         if (cmd.name && !charByName.has(cmd.name)) {
           warnings.push({ line: cmd.line, message: `「${cmd.name}」は未登録のキャラクターです（既定のダイスで表示します）` });
         }
         pendingDice = { spec: cmd.spec, result: cmd.result, characterName: cmd.name ? resolve(cmd.name) : undefined };
+        // 直前の @se をダイスロールSEとして使う場合、@wait 未指定なら
+        // カットの長さをSEの長さに合わせる（アニメと音がぴったり収まる）
+        if (pendingSe && pendingWait === null) {
+          const duration = audioDuration?.(pendingSe.asset);
+          if (duration !== undefined) pendingWait = duration;
+        }
         pushCut(null, cmd.line);
         break;
+      }
       case 'say': {
         const ch = charByName.get(cmd.name); // 別名（PL名など）でも解決される
         if (ch) {

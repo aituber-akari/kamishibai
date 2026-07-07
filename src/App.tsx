@@ -212,9 +212,18 @@ export default function App() {
   };
 
   const { commands, errors } = useMemo(() => parseScript(script), [script]);
+  // 音声素材の長さ（@still / ダイスSEのカット尺自動設定用）。ファイル名だけの参照も解決する
+  const audioDuration = useMemo(() => {
+    return (name: string): number | undefined => {
+      const exact = assets.get(name);
+      const asset =
+        exact ?? [...assets.values()].find((a) => a.name.endsWith('/' + name));
+      return asset?.kind === 'audio' ? asset.duration : undefined;
+    };
+  }, [assets]);
   const { cuts, warnings } = useMemo(
-    () => buildCuts(commands, characters, template, globalParams),
-    [commands, characters, template, globalParams],
+    () => buildCuts(commands, characters, template, globalParams, audioDuration),
+    [commands, characters, template, globalParams, audioDuration],
   );
   const problems = useMemo(
     () => [...errors.map((e) => ({ ...e, level: 'error' as const })), ...warnings.map((w) => ({ ...w, level: 'warning' as const }))].sort((a, b) => a.line - b.line),

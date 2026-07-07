@@ -7,6 +7,8 @@ export interface Asset {
   kind: 'image' | 'audio' | 'other';
   url: string;
   image?: HTMLImageElement;
+  /** 音声の長さ（秒）。@logo のカット尺自動設定などに使う */
+  duration?: number;
 }
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif)$/i;
@@ -226,8 +228,22 @@ async function loadAsset(file: Blob, path: string): Promise<Asset> {
       URL.revokeObjectURL(url);
       throw e;
     }
+  } else if (asset.kind === 'audio') {
+    asset.duration = await loadAudioDuration(url);
   }
   return asset;
+}
+
+/** 音声の長さ（秒）をメタデータから取得する。取れなくても登録自体は続行 */
+function loadAudioDuration(url: string): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    const audio = new Audio();
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = () =>
+      resolve(Number.isFinite(audio.duration) ? audio.duration : undefined);
+    audio.onerror = () => resolve(undefined);
+    audio.src = url;
+  });
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
