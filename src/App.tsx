@@ -5,6 +5,7 @@ import { getTemplate } from './templates/mazeKingdom';
 import { parseScript } from './script/parser';
 import { buildCuts } from './script/player';
 import { useAssets } from './hooks/useAssets';
+import { exportMp4 } from './export/mp4';
 import { PreviewPane } from './components/PreviewPane';
 import { AssetPanel } from './components/AssetPanel';
 import { AssetSelect } from './components/AssetSelect';
@@ -139,6 +140,36 @@ export default function App() {
   }, [template]);
 
   const importInputRef = useRef<HTMLInputElement>(null);
+  /** null = 非書き出し中、0-1 = 進捗 */
+  const [exportProgress, setExportProgress] = useState<number | null>(null);
+
+  const exportVideo = async () => {
+    if (exportProgress !== null) return;
+    setExportProgress(0);
+    try {
+      const blob = await exportMp4({
+        cuts,
+        characters,
+        template,
+        images: imageStore,
+        assets,
+        defaultDiceFolder,
+        diceAnimation,
+        fontFamily,
+        onProgress: setExportProgress,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'kamishibai.mp4';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(`動画の書き出しに失敗しました: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setExportProgress(null);
+    }
+  };
 
   const exportProject = () => {
     const file: ProjectFile = {
@@ -222,6 +253,16 @@ export default function App() {
             allowFolder
             placeholder="既定ダイス（内蔵）"
           />
+          <button
+            className="export-button"
+            onClick={exportVideo}
+            disabled={exportProgress !== null || cuts.length === 0}
+            title="脚本全体をmp4動画として書き出します（BGM/SE込み）"
+          >
+            {exportProgress === null
+              ? '🎬 動画書き出し'
+              : `書き出し中… ${Math.round(exportProgress * 100)}%`}
+          </button>
           <button onClick={exportProject}>保存（書き出し）</button>
           <button onClick={() => importInputRef.current?.click()}>開く（読み込み）</button>
           <input

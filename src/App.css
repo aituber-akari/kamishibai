@@ -330,6 +330,17 @@
   max-width: 180px;
 }
 
+.export-button {
+  background: var(--accent);
+  border-color: var(--accent);
+  min-width: 130px;
+}
+
+.export-button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
 .drop-zone:hover,
 .drop-zone.dragging {
   border-color: var(--accent);
