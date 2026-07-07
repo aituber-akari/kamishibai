@@ -5,6 +5,7 @@ import {
   CANVAS_H,
   DICE_ROLL_SECONDS,
   drawCut,
+  setCanvasFont,
   type ImageStore,
 } from '../renderer/draw';
 import { DEFAULT_CUT_SECONDS } from '../script/player';
@@ -20,6 +21,8 @@ interface Props {
   defaultDiceFolder?: string;
   /** false でダイス連番アニメを行わない */
   diceAnimation: boolean;
+  /** 動画キャンバスのフォント（未指定は同梱UDフォント） */
+  fontFamily?: string;
 }
 
 export function PreviewPane({
@@ -30,10 +33,16 @@ export function PreviewPane({
   assets,
   defaultDiceFolder,
   diceAnimation,
+  fontFamily,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  // 同梱フォントの読み込み完了後に再描画する（初回描画がフォールバック字形になるのを防ぐ）
+  const [fontsReady, setFontsReady] = useState(false);
+  useEffect(() => {
+    document.fonts.ready.then(() => setFontsReady(true));
+  }, []);
   const bgmRef = useRef<HTMLAudioElement | null>(null);
   const currentBgmName = useRef<string | null>(null);
 
@@ -49,6 +58,7 @@ export function PreviewPane({
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d');
     if (!ctx) return;
+    setCanvasFont(fontFamily);
     if (!cut) {
       ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
       ctx.fillStyle = '#101220';
@@ -75,7 +85,7 @@ export function PreviewPane({
     };
     tick();
     return () => cancelAnimationFrame(raf);
-  }, [cut, images, characters, template, defaultDiceFolder, diceAnimation]);
+  }, [cut, images, characters, template, defaultDiceFolder, diceAnimation, fontFamily, fontsReady]);
 
   // BGM / SE
   // cut オブジェクトは脚本の再パースで毎回作り直されるため、参照ではなく

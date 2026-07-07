@@ -9,7 +9,15 @@ const BAR_H = 132;
 /** アセット名（相対パス）→ 読み込み済み画像 */
 export type ImageStore = Map<string, HTMLImageElement>;
 
-const FONT = '"Hiragino Sans", "Noto Sans JP", sans-serif';
+const FONT_FALLBACK = '"Hiragino Sans", "Noto Sans JP", sans-serif';
+/** 既定はUDフォント（BIZ UDPゴシック、同梱） */
+export const DEFAULT_FONT_FAMILY = 'BIZ UDPGothic';
+let FONT = `"${DEFAULT_FONT_FAMILY}", ${FONT_FALLBACK}`;
+
+/** 動画キャンバスのフォントを変更する（全体設定から呼ばれる） */
+export function setCanvasFont(family?: string): void {
+  FONT = `"${family || DEFAULT_FONT_FAMILY}", ${FONT_FALLBACK}`;
+}
 
 /** ダイスが転がっている時間（秒）。これを過ぎると出目表示に落ち着く */
 export const DICE_ROLL_SECONDS = 1.0;
@@ -170,9 +178,16 @@ function drawImageMap(
   return { toX: (px) => x + (px / 100) * w, toY: (py) => y + (py / 100) * h, unit: h * 0.1 };
 }
 
+/** ラベルから敵味方を推定する（「敵」を含めば敵側、「味方」を含めば味方側） */
+function laneSide(label: string): 'ally' | 'enemy' | 'neutral' {
+  if (label.includes('敵')) return 'enemy';
+  if (label.includes('味方') || label.includes('自軍')) return 'ally';
+  return 'neutral';
+}
+
 /**
  * 素材不要の生成戦場マップ。列（レーン）＝縦帯として描画し、
- * 状態 danger の列（戦場トラップ発動）は赤く塗る
+ * 敵味方で色相を分け、状態 danger の列（戦場トラップ発動）は朱色で警告する
  */
 function drawLanesMap(
   ctx: CanvasRenderingContext2D,
@@ -193,18 +208,29 @@ function drawLanesMap(
     const lane = map.lanes[i];
     const x = startX + i * (laneW + gap);
     const danger = lane.state === 'danger';
+    const side = laneSide(lane.label);
+
+    // 敵味方で色相を変える（色覚多様性に配慮して青系 vs 暖色系）。
+    // トラップ発動(danger)は色＋明度＋枠の太さの複数の手がかりで区別する
+    const fill = danger
+      ? 'rgba(196, 98, 32, 0.92)'
+      : side === 'ally'
+        ? 'rgba(86, 118, 156, 0.55)'
+        : side === 'enemy'
+          ? 'rgba(150, 100, 92, 0.55)'
+          : 'rgba(140, 138, 148, 0.5)';
 
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,0.45)';
     ctx.shadowBlur = 10;
-    ctx.fillStyle = danger ? 'rgba(148, 28, 34, 0.94)' : 'rgba(148, 143, 152, 0.52)';
+    ctx.fillStyle = fill;
     ctx.beginPath();
     ctx.roundRect(x, y, laneW, laneH, 8);
     ctx.fill();
     ctx.restore();
 
-    ctx.strokeStyle = danger ? 'rgba(255, 190, 190, 0.7)' : 'rgba(255,255,255,0.45)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = danger ? 'rgba(255, 216, 160, 0.9)' : 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = danger ? 3.5 : 2;
     ctx.beginPath();
     ctx.roundRect(x, y, laneW, laneH, 8);
     ctx.stroke();
@@ -224,7 +250,7 @@ function drawLanesMap(
     ctx.stroke();
 
     // 縦書きラベル（透かし風）
-    ctx.fillStyle = danger ? 'rgba(255, 226, 226, 0.5)' : 'rgba(255,255,255,0.5)';
+    ctx.fillStyle = danger ? 'rgba(255, 240, 218, 0.65)' : 'rgba(255,255,255,0.5)';
     const chars = [...lane.label];
     const fontSize = Math.min(laneW * 0.5, (laneH - 24) / Math.max(chars.length, 1));
     ctx.font = `bold ${fontSize}px ${FONT}`;

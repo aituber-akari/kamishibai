@@ -1,3 +1,18 @@
+/* UDフォント（BIZ UDPゴシック、SIL OFL）を同梱。エディタUIと動画キャンバスの既定フォント */
+@font-face {
+  font-family: 'BIZ UDPGothic';
+  src: url('/fonts/BIZUDPGothic-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'BIZ UDPGothic';
+  src: url('/fonts/BIZUDPGothic-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+
 :root {
   --bg: #0e0f17;
   --bg-panel: #171927;
@@ -25,7 +40,7 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  font-family: 'BIZ UDPGothic', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
   font-size: 14px;
   line-height: 1.6;
 }

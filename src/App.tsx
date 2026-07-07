@@ -20,6 +20,8 @@ interface StoredProject {
   diceAnimation?: boolean;
   /** キャラにダイスセット未設定のときに使う素材フォルダ */
   defaultDiceFolder?: string;
+  /** 動画キャンバスのフォント（未指定は同梱のBIZ UDPゴシック） */
+  fontFamily?: string;
 }
 
 function loadStored(): StoredProject | null {
@@ -68,8 +70,18 @@ function normalizeProject(data: unknown): StoredProject | null {
     characters,
     diceAnimation: d.diceAnimation !== false,
     defaultDiceFolder: typeof d.defaultDiceFolder === 'string' ? d.defaultDiceFolder : undefined,
+    fontFamily: typeof d.fontFamily === 'string' ? d.fontFamily : undefined,
   };
 }
+
+/** 動画キャンバス用フォントの選択肢（既定は同梱のUDフォント） */
+const FONT_CHOICES: { value: string; label: string }[] = [
+  { value: '', label: 'BIZ UDPゴシック（UD・既定）' },
+  { value: 'Hiragino Sans', label: 'ヒラギノ角ゴシック' },
+  { value: 'Hiragino Mincho ProN', label: 'ヒラギノ明朝' },
+  { value: 'YuGothic', label: '游ゴシック' },
+  { value: 'sans-serif', label: 'システム標準' },
+];
 
 /** プロジェクトファイル（.kamishibai.json）の形式 */
 interface ProjectFile extends StoredProject {
@@ -86,6 +98,7 @@ export default function App() {
   const [defaultDiceFolder, setDefaultDiceFolder] = useState<string | undefined>(
     stored?.defaultDiceFolder,
   );
+  const [fontFamily, setFontFamily] = useState<string | undefined>(stored?.fontFamily);
   const { assets, imageStore, addFiles, addDropped, removeAsset, removeFolder } = useAssets();
   const imageAssets = useMemo(
     () => [...assets.values()].filter((a) => a.kind === 'image'),
@@ -98,14 +111,14 @@ export default function App() {
       try {
         localStorage.setItem(
           STORAGE_KEY,
-          JSON.stringify({ script, characters, diceAnimation, defaultDiceFolder }),
+          JSON.stringify({ script, characters, diceAnimation, defaultDiceFolder, fontFamily }),
         );
       } catch {
         // quota超過などで保存できなくても編集は続行できる（ファイル書き出しは可能）
       }
     }, 500);
     return () => clearTimeout(t);
-  }, [script, characters, diceAnimation, defaultDiceFolder]);
+  }, [script, characters, diceAnimation, defaultDiceFolder, fontFamily]);
 
   const globalParams = useMemo(() => {
     const params: Record<string, ParamValue> = {};
@@ -130,6 +143,7 @@ export default function App() {
       characters,
       diceAnimation,
       defaultDiceFolder,
+      fontFamily,
     };
     const blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -153,6 +167,7 @@ export default function App() {
       setCharacters(project.characters);
       setDiceAnimation(project.diceAnimation !== false);
       setDefaultDiceFolder(project.defaultDiceFolder);
+      setFontFamily(project.fontFamily);
     } catch {
       alert('プロジェクトファイルを読み込めませんでした');
     }
@@ -174,6 +189,17 @@ export default function App() {
         <h1>kamishibai</h1>
         <span className="subtitle">TRPGリプレイ動画クリエイター — {template.name}</span>
         <div className="header-actions">
+          <select
+            value={fontFamily ?? ''}
+            onChange={(e) => setFontFamily(e.target.value || undefined)}
+            title="動画のフォント（既定はユニバーサルデザインのBIZ UDPゴシック）"
+          >
+            {FONT_CHOICES.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+          </select>
           <label className="inline-checkbox" title="OFFにするとダイスは転がらず出目だけ表示します">
             <input
               type="checkbox"
@@ -234,6 +260,7 @@ export default function App() {
             assets={assets}
             defaultDiceFolder={defaultDiceFolder}
             diceAnimation={diceAnimation}
+            fontFamily={fontFamily}
           />
           <div className="bottom-panels">
             <CharacterPanel

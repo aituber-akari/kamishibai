@@ -108,8 +108,9 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
       if (!args[0]) return err('@map にはマップ画像のファイル名か off が必要です');
       return { type: 'map', asset: args[0] === 'off' ? null : args[0], line };
     case 'bf':
-      // 生成戦場マップ:「@bf 地雷原 地雷原 敵前衛 敵後衛」列ラベルを並べる。@bf off で消去
-      if (!args[0]) return err('@bf は「@bf 列1ラベル 列2ラベル …」または「@bf off」の形式です');
+      // 生成戦場マップ。引数なしで標準の6列（味方本陣〜敵本陣）、
+      // ラベルを並べれば特殊戦場、@bf off で消去
+      if (!args[0]) return { type: 'bf', lanes: [], line };
       if (args[0] === 'off') return { type: 'bf', lanes: null, line };
       return { type: 'bf', lanes: args, line };
     case 'lane': {

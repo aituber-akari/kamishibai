@@ -12,6 +12,16 @@ import type {
 /** wait 指定がないカットの既定表示時間（秒）。プレビューとmp4書き出しで共有する */
 export const DEFAULT_CUT_SECONDS = 2.5;
 
+/** @bf 引数なしのときの標準戦場（よほど特殊な戦闘でない限りこの構成） */
+export const DEFAULT_BATTLEFIELD_LANES = [
+  '味方本陣',
+  '味方後衛',
+  '味方前衛',
+  '敵前衛',
+  '敵後衛',
+  '敵本陣',
+];
+
 export interface BuildResult {
   cuts: Cut[];
   /** 未登録キャラ名の指定など、実行はできるが意図とズレていそうな箇所 */
@@ -116,18 +126,22 @@ export function buildCuts(
             ? null
             : { kind: 'image', asset: cmd.asset, chips: state.map?.chips ?? [], marks: state.map?.marks ?? [] };
         break;
-      case 'bf':
-        state.map =
-          cmd.lanes === null
-            ? null
-            : {
-                kind: 'lanes',
-                lanes: cmd.lanes.map((label) => ({ label, state: 'normal' as const })),
-                rows: 5,
-                chips: state.map?.chips ?? [],
-                marks: state.map?.marks ?? [],
-              };
+      case 'bf': {
+        if (cmd.lanes === null) {
+          state.map = null;
+          break;
+        }
+        // 引数なしは標準戦場（迷宮キングダムの基本配置）
+        const labels = cmd.lanes.length > 0 ? cmd.lanes : DEFAULT_BATTLEFIELD_LANES;
+        state.map = {
+          kind: 'lanes',
+          lanes: labels.map((label) => ({ label, state: 'normal' as const })),
+          rows: 5,
+          chips: state.map?.chips ?? [],
+          marks: state.map?.marks ?? [],
+        };
         break;
+      }
       case 'lane': {
         if (state.map?.kind !== 'lanes') {
           warnings.push({ line: cmd.line, message: '@lane は @bf で生成した戦場マップに対して使います' });
