@@ -70,11 +70,31 @@ function drawPortraits(
       p.position === 'left' ? 40 : p.position === 'right' ? CANVAS_W - w - 40 : (CANVAS_W - w) / 2;
 
     // 発言中でないキャラは少し暗く
-    ctx.save();
-    if (cut.message && !isSpeaking(p.characterName)) ctx.filter = 'brightness(0.6)';
-    ctx.drawImage(img, x, y, w, h);
-    ctx.restore();
+    if (cut.message && !isSpeaking(p.characterName)) {
+      ctx.drawImage(darkened(img), x, y, w, h);
+    } else {
+      ctx.drawImage(img, x, y, w, h);
+    }
   }
+}
+
+// ctx.filter はブラウザ実装差があり将来のOffscreenCanvas書き出しでリスクなので、
+// 暗色化はプリミティブ合成（source-atop）で行いキャッシュする
+const darkenCache = new WeakMap<HTMLImageElement, HTMLCanvasElement>();
+
+function darkened(img: HTMLImageElement): HTMLCanvasElement {
+  const cached = darkenCache.get(img);
+  if (cached) return cached;
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const c = canvas.getContext('2d')!;
+  c.drawImage(img, 0, 0);
+  c.globalCompositeOperation = 'source-atop';
+  c.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  c.fillRect(0, 0, canvas.width, canvas.height);
+  darkenCache.set(img, canvas);
+  return canvas;
 }
 
 // ============ ステータスバー ============
@@ -243,11 +263,11 @@ function drawMessageWindow(
   ctx.textBaseline = 'middle';
   ctx.fillText(message.speaker, x + 38, y);
 
-  // 本文（自動折り返し）
+  // 本文（自動折り返し・最大3行。あふれた分は「…」で切ってウィンドウ外への描画を防ぐ）
   ctx.font = `22px ${FONT}`;
   ctx.textBaseline = 'top';
   ctx.fillStyle = '#f2f3f7';
-  wrapText(ctx, message.text, x + 30, y + 36, w - 60, 34);
+  wrapText(ctx, message.text, x + 30, y + 36, w - 60, 34, 3);
   ctx.restore();
 }
 
@@ -258,19 +278,26 @@ function wrapText(
   y: number,
   maxWidth: number,
   lineHeight: number,
+  maxLines: number,
 ): void {
+  const lines: string[] = [];
   let line = '';
-  let cy = y;
   for (const chch of text) {
     if (ctx.measureText(line + chch).width > maxWidth) {
-      ctx.fillText(line, x, cy);
+      lines.push(line);
       line = chch;
-      cy += lineHeight;
     } else {
       line += chch;
     }
   }
-  if (line) ctx.fillText(line, x, cy);
+  if (line) lines.push(line);
+
+  const clipped = lines.length > maxLines;
+  for (let i = 0; i < Math.min(lines.length, maxLines); i++) {
+    const isLast = i === maxLines - 1;
+    const t = clipped && isLast ? lines[i].slice(0, -1) + '…' : lines[i];
+    ctx.fillText(t, x, y + i * lineHeight);
+  }
 }
 
 // ============ 演出 ============

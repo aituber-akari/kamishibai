@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 export interface Asset {
   name: string;
@@ -19,20 +19,18 @@ function kindOf(file: File): Asset['kind'] {
  */
 export function useAssets() {
   const [assets, setAssets] = useState<Map<string, Asset>>(new Map());
-  const assetsRef = useRef(assets);
-  assetsRef.current = assets;
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
-    const loaded: Asset[] = await Promise.all(
-      Array.from(files).map(async (file) => {
-        const url = URL.createObjectURL(file);
-        const asset: Asset = { name: file.name, kind: kindOf(file), url };
-        if (asset.kind === 'image') {
-          asset.image = await loadImage(url);
-        }
-        return asset;
-      }),
-    );
+    // 1ファイルの読み込み失敗（壊れた画像など）が他のファイルを巻き込まないよう
+    // allSettled で成功分だけ登録する
+    const results = await Promise.allSettled(Array.from(files).map(loadAsset));
+    const loaded: Asset[] = [];
+    const failed: string[] = [];
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') loaded.push(r.value);
+      else failed.push(files[i]?.name ?? '(不明なファイル)');
+    });
+
     setAssets((prev) => {
       const next = new Map(prev);
       for (const a of loaded) {
@@ -42,6 +40,9 @@ export function useAssets() {
       }
       return next;
     });
+    if (failed.length > 0) {
+      alert(`読み込めなかったファイルがあります:\n${failed.join('\n')}`);
+    }
     return loaded;
   }, []);
 
@@ -55,13 +56,30 @@ export function useAssets() {
     });
   }, []);
 
-  /** 描画用: 画像アセットだけの Map を作る */
-  const imageStore = new Map<string, HTMLImageElement>();
-  for (const [name, a] of assets) {
-    if (a.image) imageStore.set(name, a.image);
-  }
+  /** 描画用: 画像アセットだけの Map */
+  const imageStore = useMemo(() => {
+    const store = new Map<string, HTMLImageElement>();
+    for (const [name, a] of assets) {
+      if (a.image) store.set(name, a.image);
+    }
+    return store;
+  }, [assets]);
 
   return { assets, imageStore, addFiles, removeAsset };
+}
+
+async function loadAsset(file: File): Promise<Asset> {
+  const url = URL.createObjectURL(file);
+  const asset: Asset = { name: file.name, kind: kindOf(file), url };
+  if (asset.kind === 'image') {
+    try {
+      asset.image = await loadImage(url);
+    } catch (e) {
+      URL.revokeObjectURL(url);
+      throw e;
+    }
+  }
+  return asset;
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {

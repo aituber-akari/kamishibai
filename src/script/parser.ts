@@ -20,11 +20,13 @@ export function parseScript(source: string): ParseResult {
   const lines = source.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
     const lineNo = i + 1;
-    // 行中コメントを除去（全角＃も許容）
-    const raw = lines[i].replace(/[#＃].*$/, '').trim();
-    if (raw === '') continue;
+    let raw = lines[i].trim();
+    // 行頭コメント（全角＃も許容）。セリフ中の「#」を壊さないよう、
+    // 行中コメントはコマンド行（@）でのみ許可する
+    if (raw === '' || raw.startsWith('#') || raw.startsWith('＃')) continue;
 
-    if (raw.startsWith('@')) {
+    if (raw.startsWith('@') || raw.startsWith('＠')) {
+      raw = raw.replace(/\s[#＃].*$/, '').trim();
       const cmd = parseCommand(raw, lineNo, errors);
       if (cmd) commands.push(cmd);
       continue;
@@ -78,12 +80,16 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
     case 'damage':
     case 'heal': {
       const amount = Number(args[1]);
-      if (!args[0] || !Number.isFinite(amount)) return err(`@${head} は「@${head} 名前 数値」の形式です`);
+      if (!args[0] || !Number.isFinite(amount) || amount <= 0)
+        return err(`@${head} は「@${head} 名前 正の数値」の形式です`);
       return { type: head, name: args[0], amount, line };
     }
     case 'set':
       if (args.length < 3) return err('@set は「@set 名前 パラメータ 値」の形式です');
       return { type: 'set', name: args[0], param: args[1], value: args.slice(2).join(' '), line };
+    case 'setglobal':
+      if (args.length < 2) return err('@setglobal は「@setglobal パラメータ 値」の形式です');
+      return { type: 'setglobal', param: args[0], value: args.slice(1).join(' '), line };
     case 'dice':
       if (args.length < 2) return err('@dice は「@dice 2d6 出目」の形式です');
       return { type: 'dice', spec: args[0], result: args.slice(1).join(' '), line };

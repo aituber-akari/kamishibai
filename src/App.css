@@ -24,6 +24,17 @@
   font-size: 13px;
 }
 
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.header-actions button {
+  font-size: 12px;
+  padding: 4px 12px;
+}
+
 .app-main {
   flex: 1;
   display: grid;
@@ -94,6 +105,10 @@
   font-size: 12px;
   max-height: 110px;
   overflow-y: auto;
+}
+
+.problem-warning {
+  color: #ffc44d;
 }
 
 /* ============ プレビュー ============ */

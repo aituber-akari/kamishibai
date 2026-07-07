@@ -3,9 +3,19 @@ import type {
   Cut,
   GameTemplate,
   ParamValue,
+  ParseError,
   PortraitState,
   ScriptCommand,
 } from '../types';
+
+/** wait 指定がないカットの既定表示時間（秒）。プレビューとmp4書き出しで共有する */
+export const DEFAULT_CUT_SECONDS = 2.5;
+
+export interface BuildResult {
+  cuts: Cut[];
+  /** 未登録キャラ名の指定など、実行はできるが意図とズレていそうな箇所 */
+  warnings: ParseError[];
+}
 
 interface FoldState {
   bg: string | null;
@@ -26,7 +36,8 @@ export function buildCuts(
   characters: Character[],
   template: GameTemplate,
   globalParams: Record<string, ParamValue>,
-): Cut[] {
+): BuildResult {
+  const warnings: ParseError[] = [];
   const state: FoldState = {
     bg: null,
     bgm: null,
@@ -105,6 +116,10 @@ export function buildCuts(
         break;
       case 'damage':
       case 'heal': {
+        if (!state.params[cmd.name]) {
+          warnings.push({ line: cmd.line, message: `「${cmd.name}」は未登録のキャラクターです（@${cmd.type} は無視されます）` });
+          break;
+        }
         const delta = cmd.type === 'damage' ? -cmd.amount : cmd.amount;
         applyDelta(state.params[cmd.name], template.damageParamKey, delta);
         pendingDamage = { characterName: cmd.name, amount: cmd.type === 'damage' ? cmd.amount : -cmd.amount };
@@ -113,10 +128,17 @@ export function buildCuts(
         break;
       }
       case 'set': {
-        const target = state.params[cmd.name] ?? state.globals;
+        const target = state.params[cmd.name];
+        if (!target) {
+          warnings.push({ line: cmd.line, message: `「${cmd.name}」は未登録のキャラクターです（@set は無視されます。全体パラメータは @setglobal を使ってください）` });
+          break;
+        }
         setParam(target, cmd.param, cmd.value, template);
         break;
       }
+      case 'setglobal':
+        setParam(state.globals, cmd.param, cmd.value, template);
+        break;
       case 'dice':
         pendingDice = { spec: cmd.spec, result: cmd.result };
         pushCut(null, cmd.line);
@@ -136,7 +158,7 @@ export function buildCuts(
     }
   }
 
-  return cuts;
+  return { cuts, warnings };
 }
 
 function applyDelta(

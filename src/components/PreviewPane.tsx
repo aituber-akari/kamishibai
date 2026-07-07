@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Character, Cut, GameTemplate } from '../types';
 import { CANVAS_W, CANVAS_H, drawCut, type ImageStore } from '../renderer/draw';
+import { DEFAULT_CUT_SECONDS } from '../script/player';
 import type { Asset } from '../hooks/useAssets';
 
 interface Props {
@@ -11,8 +12,6 @@ interface Props {
   assets: Map<string, Asset>;
 }
 
-const DEFAULT_CUT_SECONDS = 2.5;
-
 export function PreviewPane({ cuts, characters, template, images, assets }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [index, setIndex] = useState(0);
@@ -22,6 +21,11 @@ export function PreviewPane({ cuts, characters, template, images, assets }: Prop
 
   const clamped = Math.min(index, Math.max(0, cuts.length - 1));
   const cut: Cut | undefined = cuts[clamped];
+
+  // 脚本編集でカット数が減ったとき、index が範囲外のまま残らないようにする
+  useEffect(() => {
+    setIndex((i) => Math.min(i, Math.max(0, cuts.length - 1)));
+  }, [cuts.length]);
 
   // 描画
   useEffect(() => {
@@ -41,6 +45,9 @@ export function PreviewPane({ cuts, characters, template, images, assets }: Prop
   }, [cut, images, characters, template]);
 
   // BGM / SE
+  // cut オブジェクトは脚本の再パースで毎回作り直されるため、参照ではなく
+  // カット位置（index）の変化でガードしないと編集のたびにSEが再発火する
+  const lastSeCutIndex = useRef<number>(-1);
   useEffect(() => {
     if (!cut) return;
     if (cut.bgm !== currentBgmName.current) {
@@ -56,10 +63,13 @@ export function PreviewPane({ cuts, characters, template, images, assets }: Prop
         bgmRef.current = audio;
       }
     }
-    const se = cut.se ? assets.get(cut.se) : undefined;
-    if (se?.kind === 'audio') {
-      const audio = new Audio(se.url);
-      audio.play().catch(() => {});
+    if (cut.index !== lastSeCutIndex.current) {
+      lastSeCutIndex.current = cut.index;
+      const se = cut.se ? assets.get(cut.se) : undefined;
+      if (se?.kind === 'audio') {
+        const audio = new Audio(se.url);
+        audio.play().catch(() => {});
+      }
     }
   }, [cut, assets]);
 

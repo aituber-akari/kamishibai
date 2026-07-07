@@ -60,6 +60,7 @@ export type ScriptCommand =
   | { type: 'damage'; name: string; amount: number; line: number }
   | { type: 'heal'; name: string; amount: number; line: number }
   | { type: 'set'; name: string; param: string; value: string; line: number }
+  | { type: 'setglobal'; param: string; value: string; line: number }
   | { type: 'dice'; spec: string; result: string; line: number }
   | { type: 'status'; visible: boolean; line: number }
   | { type: 'wait'; seconds: number; line: number }
