@@ -110,7 +110,7 @@ export type ScriptCommand =
   | { type: 'bf'; lanes: string[] | null; line: number } // 生成戦場マップ。null = 非表示
   | { type: 'lane'; index: number; label?: string; state?: Lane['state']; line: number }
   | { type: 'trap'; index: number; label: string | null; line: number } // null = 解除（元ラベルに戻す）
-  | { type: 'chip'; name: string; x: number | null; y: number | null; line: number } // null = 撤去
+  | { type: 'chip'; name: string; x: number | null; y: number | null; image?: string; line: number } // null = 撤去
   | { type: 'mark'; x: number; y: number; text: string | null; line: number } // null = 撤去
   | { type: 'name'; name: string; newName: string; line: number } // 恒常表示名の変更
   | { type: 'fadeout'; seconds: number; color: string; line: number } // 画面のフェード（それ自体が1カット）
@@ -168,12 +168,17 @@ export interface DiceEffect {
 
 /**
  * マップ上のキャラチップ。
- * 画像マップでは百分率（0-100）、生成戦場マップでは列・行（1始まり、小数可）
+ * 画像マップでは百分率（0-100）、生成戦場マップでは列・行（1始まり、小数可）。
+ * 未登録名（その場限りの敵など）も置ける
  */
 export interface ChipState {
   characterName: string;
   x: number;
   y: number;
+  /** チップ画像の指定（@chip の4番目の引数。キャラ設定より優先） */
+  image?: string;
+  /** 直前の位置（このカットの冒頭で from → x,y へ滑走移動する演出用） */
+  from?: { x: number; y: number };
 }
 
 /** マップ上のマーカー（「死」「天」「鴉」等の白札）。座標はチップと同じ規則 */

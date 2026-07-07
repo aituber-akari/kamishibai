@@ -3,6 +3,7 @@ import type { Character, Cut, GameTemplate } from '../types';
 import {
   CANVAS_W,
   CANVAS_H,
+  CHIP_MOVE_SECONDS,
   DICE_ROLL_SECONDS,
   drawCut,
   setCanvasFont,
@@ -98,21 +99,27 @@ export function PreviewPane({
       cut.dice && diceAnimation ? DICE_ROLL_SECONDS + 0.1 : 0,
       cut.fadeInSeconds ?? 0,
       cut.fadeOutSeconds ?? 0,
+      cut.map?.chips.some((c) => c.from) ? CHIP_MOVE_SECONDS + 0.05 : 0,
     );
     if (animateUntil === 0) {
       drawCut(ctx, cut, images, characters, template, options);
       return;
     }
 
-    let raf = 0;
+    // requestAnimationFrame は非表示タブで発火しないため、壁時計ベースの
+    // インターバル駆動にする。描画は「経過秒→絵」の決定的計算なので、
+    // タイマーが間引かれても最終フレームは必ず正しい状態になる
     const start = performance.now();
-    const tick = () => {
-      const t = (performance.now() - start) / 1000;
+    const draw = () => {
+      const t = Math.min((performance.now() - start) / 1000, animateUntil);
       drawCut(ctx, cut, images, characters, template, { ...options, timeInCut: t });
-      if (t < animateUntil) raf = requestAnimationFrame(tick);
+      return t >= animateUntil;
     };
-    tick();
-    return () => cancelAnimationFrame(raf);
+    draw();
+    const timer = setInterval(() => {
+      if (draw()) clearInterval(timer);
+    }, 33);
+    return () => clearInterval(timer);
   }, [cut, images, characters, template, defaultDiceFolder, diceAnimation, fontFamily, fontsReady]);
 
   // BGM / SE

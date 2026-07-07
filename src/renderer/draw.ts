@@ -75,7 +75,7 @@ export function drawCut(
   }
 
   drawBackground(ctx, cut, images);
-  if (cut.map) drawMap(ctx, cut.map, images, characters, cut.displayNames, template);
+  if (cut.map) drawMap(ctx, cut, cut.map, images, characters, template, options);
   drawPortraits(ctx, cut, images, characters);
   if (cut.statusVisible) drawStatusBar(ctx, cut, images, characters, template);
   if (cut.dice) drawDice(ctx, cut.dice, images, characters, options);
@@ -258,18 +258,22 @@ interface MapGeometry {
   unit: number;
 }
 
+/** チップの滑走移動にかける時間（秒） */
+export const CHIP_MOVE_SECONDS = 0.7;
+
 function drawMap(
   ctx: CanvasRenderingContext2D,
+  cut: Cut,
   map: MapState,
   images: ImageStore,
   characters: Character[],
-  displayNames: Record<string, string>,
   template: GameTemplate,
+  options: DrawOptions,
 ): void {
   const geo =
     map.kind === 'image' ? drawImageMap(ctx, map, images) : drawLanesMap(ctx, map, template);
   if (!geo) return;
-  drawChips(ctx, map, images, characters, displayNames, geo);
+  drawChips(ctx, cut, map, images, characters, template, geo, options);
   drawMarks(ctx, map, geo);
 }
 
@@ -399,21 +403,33 @@ function drawLanesMap(
 
 function drawChips(
   ctx: CanvasRenderingContext2D,
+  cut: Cut,
   map: MapState,
   images: ImageStore,
   characters: Character[],
-  displayNames: Record<string, string>,
+  template: GameTemplate,
   geo: MapGeometry,
+  options: DrawOptions,
 ): void {
   const charByName = new Map(characters.map((c) => [c.name, c]));
+  const t = options.timeInCut ?? Infinity;
+
   for (const chip of map.chips) {
-    const ch = charByName.get(chip.characterName);
-    if (!ch) continue;
-    const asset = ch.chipImage ?? ch.faceIcon;
+    const ch = charByName.get(chip.characterName); // 未登録名（その場限りの敵）は undefined のまま描く
+    const asset = chip.image ?? ch?.chipImage ?? ch?.faceIcon;
     const chipImg = asset ? findImage(images, asset) : undefined;
-    const cx = geo.toX(chip.x);
-    const cy = geo.toY(chip.y);
-    const size = Math.max(24, geo.unit) * (ch.chipScale ?? 1);
+
+    // 滑走移動: from → 現在位置へキャンバス座標で補間（イージング付き）
+    let cx = geo.toX(chip.x);
+    let cy = geo.toY(chip.y);
+    if (chip.from && t < CHIP_MOVE_SECONDS) {
+      const p = t / CHIP_MOVE_SECONDS;
+      const e = p * p * (3 - 2 * p); // smoothstep
+      cx = geo.toX(chip.from.x) + (cx - geo.toX(chip.from.x)) * e;
+      cy = geo.toY(chip.from.y) + (cy - geo.toY(chip.from.y)) * e;
+    }
+
+    const size = Math.max(24, geo.unit) * (ch?.chipScale ?? 1);
     if (chipImg) {
       const s = size / Math.max(chipImg.width, chipImg.height);
       ctx.drawImage(
@@ -424,7 +440,7 @@ function drawChips(
         chipImg.height * s,
       );
     } else {
-      // チップ画像未設定時は名前入りのプレースホルダ
+      // チップ画像がない場合は名前入りのプレースホルダ
       ctx.save();
       ctx.fillStyle = 'rgba(88, 101, 242, 0.9)';
       ctx.beginPath();
@@ -434,8 +450,34 @@ function drawChips(
       ctx.font = `bold ${Math.max(11, size * 0.32)}px ${FONT}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText((displayNames[chip.characterName] ?? chip.characterName).slice(0, 2), cx, cy);
+      ctx.fillText((cut.displayNames[chip.characterName] ?? chip.characterName).slice(0, 2), cx, cy);
       ctx.restore();
+    }
+
+    // ステータスバー非表示の登録キャラ（＝敵など）はチップの下にミニHPを表示する
+    if (ch && !ch.showInStatusBar) {
+      const hp = cut.paramsSnapshot[ch.name]?.[template.damageParamKey];
+      if (hp?.kind === 'pair' && hp.max > 0) {
+        const barW = Math.max(36, size);
+        const barH = 6;
+        const bx = cx - barW / 2;
+        const by = cy + size / 2 + 4;
+        const ratio = Math.max(0, Math.min(1, hp.current / hp.max));
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,0,0.65)';
+        ctx.fillRect(bx - 1, by - 1, barW + 2, barH + 2);
+        ctx.fillStyle = ratio <= 0.25 ? '#ff5d5d' : ratio <= 0.5 ? '#ffc44d' : '#6dff9e';
+        ctx.fillRect(bx, by, barW * ratio, barH);
+        ctx.font = `bold 12px ${FONT}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+        ctx.strokeText(`${hp.current}/${hp.max}`, cx, by + barH + 2);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(`${hp.current}/${hp.max}`, cx, by + barH + 2);
+        ctx.restore();
+      }
     }
   }
 }

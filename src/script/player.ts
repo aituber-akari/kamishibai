@@ -122,6 +122,10 @@ export function buildCuts(
     pendingBgmFadeOut = null;
     pendingFadeIn = null;
     pendingFadeOut = null;
+    // チップの滑走移動は「移動が起きた直後のカット」でだけ再生する
+    if (state.map) {
+      for (const c of state.map.chips) delete c.from;
+    }
   };
 
   for (const cmd of commands) {
@@ -219,16 +223,19 @@ export function buildCuts(
           warnings.push({ line: cmd.line, message: '@chip の前に @map か @bf でマップを表示してください' });
           break;
         }
-        if (!charByName.has(cmd.name)) {
-          warnings.push({ line: cmd.line, message: `「${cmd.name}」は未登録のキャラクターです（@chip は無視されます）` });
-          break;
-        }
-        {
-          const entity = resolve(cmd.name);
-          state.map.chips = state.map.chips.filter((c) => c.characterName !== entity);
-          if (cmd.x !== null && cmd.y !== null) {
-            state.map.chips.push({ characterName: entity, x: cmd.x, y: cmd.y });
-          }
+        // 未登録名も許可（その場限りの敵チップ）。登録キャラなら別名も解決
+        const entity = resolve(cmd.name);
+        const existing = state.map.chips.find((c) => c.characterName === entity);
+        state.map.chips = state.map.chips.filter((c) => c.characterName !== entity);
+        if (cmd.x !== null && cmd.y !== null) {
+          state.map.chips.push({
+            characterName: entity,
+            x: cmd.x,
+            y: cmd.y,
+            image: cmd.image ?? existing?.image,
+            // 既存チップの移動なら、次のカットの冒頭で滑走するよう元位置を持たせる
+            from: existing ? (existing.from ?? { x: existing.x, y: existing.y }) : undefined,
+          });
         }
         break;
       }

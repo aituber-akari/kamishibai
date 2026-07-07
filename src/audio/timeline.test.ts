@@ -182,6 +182,28 @@ describe('複数対象のダメージ・回復・@mod', () => {
   });
 });
 
+describe('戦場チップ（未登録の敵・滑走移動）', () => {
+  it('未登録名のチップを警告なしで置け、画像も指定できる', () => {
+    const { commands } = parseScript(['@bf', '@chip ゴブリンA 4 2 ゴブリン.png', 'GM: 敵だ！'].join('\n'));
+    const { cuts, warnings } = buildCuts(commands, chars, mazeKingdomTemplate, {});
+    expect(warnings).toEqual([]);
+    expect(cuts[0].map?.chips).toEqual([
+      { characterName: 'ゴブリンA', x: 4, y: 2, image: 'ゴブリン.png', from: undefined },
+    ]);
+  });
+
+  it('チップ移動は直後のカットにだけ from が付く（滑走は一度きり）', () => {
+    const { commands } = parseScript(
+      ['@bf', '@chip ゴブリンA 4 2', 'GM: 出現', '@chip ゴブリンA 3 2', 'GM: 前進してきた！', 'GM: にらみ合い'].join('\n'),
+    );
+    const { cuts } = buildCuts(commands, chars, mazeKingdomTemplate, {});
+    const chipAt = (i: number) => cuts[i].map!.chips[0];
+    expect(chipAt(0).from).toBeUndefined(); // 新規配置は滑走しない
+    expect(chipAt(1)).toMatchObject({ x: 3, y: 2, from: { x: 4, y: 2 } }); // 移動直後のカット
+    expect(chipAt(2).from).toBeUndefined(); // 次のカットでは静止
+  });
+});
+
 describe('@text ブロック（テキスト画面）', () => {
   it('@end までの行を字下げ・空行込みで収集し、@text off で解除する', () => {
     const src = [

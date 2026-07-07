@@ -193,14 +193,15 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
       return { type: 'mark', x, y, text: args[2] === 'off' ? null : args.slice(2).join(' '), line };
     }
     case 'chip': {
-      // 「@chip 名前 x y」（x,y はマップに対する% 0-100）または「@chip 名前 off」
-      if (!args[0]) return err('@chip は「@chip 名前 x y」または「@chip 名前 off」の形式です');
+      // 「@chip 名前 x y [画像]」または「@chip 名前 off」。
+      // 未登録名も置けるので、その場限りの敵は画像を4番目に指定する
+      if (!args[0]) return err('@chip は「@chip 名前 x y [画像]」または「@chip 名前 off」の形式です');
       if (args[1] === 'off') return { type: 'chip', name: args[0], x: null, y: null, line };
       const x = Number(args[1]);
       const y = Number(args[2]);
       if (!Number.isFinite(x) || !Number.isFinite(y))
-        return err('@chip の座標はマップに対する%（0-100）で「@chip 名前 25 40」のように指定します');
-      return { type: 'chip', name: args[0], x, y, line };
+        return err('@chip の座標は「@chip 名前 25 40」のように数値で指定します（画像マップは% / 生成戦場は列 行）');
+      return { type: 'chip', name: args[0], x, y, image: args[3], line };
     }
     case 'name':
       // 「@name モブ 村長」— ステータスバー等の恒常表示名をそのカット以降変更する
