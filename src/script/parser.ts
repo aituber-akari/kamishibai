@@ -121,10 +121,21 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
       return { type: 'hide', name: args[0], line };
     case 'damage':
     case 'heal': {
-      const amount = Number(args[1]);
-      if (!args[0] || !Number.isFinite(amount) || amount <= 0)
-        return err(`@${head} は「@${head} 名前 正の数値」の形式です`);
-      return { type: head, name: args[0], amount, line };
+      // 「@damage 名前 5」「@damage 名前1 名前2 5」「@damage 名前1 5 名前2 3」
+      const parsed = parseTargetGroups(args);
+      if ('error' in parsed) return err(`@${head}: ${parsed.error}（例: @${head} 名前1 名前2 5）`);
+      if (parsed.targets.some((t) => t.amount <= 0))
+        return err(`@${head} の数値は正の数で指定してください`);
+      return { type: head, targets: parsed.targets, line };
+    }
+    case 'mod': {
+      // 「@mod 気力 名前1 名前2 -1」HP以外のパラメータ増減（符号付き）
+      if (args.length < 3) return err('@mod は「@mod パラメータ 名前… ±数値」の形式です');
+      const parsed = parseTargetGroups(args.slice(1));
+      if ('error' in parsed) return err(`@mod: ${parsed.error}（例: @mod 気力 名前1 名前2 -1）`);
+      if (parsed.targets.some((t) => t.amount === 0))
+        return err('@mod の数値には 0 以外の増減量を指定してください（例: +2 / -1）');
+      return { type: 'mod', param: args[0], targets: parsed.targets, line };
     }
     case 'set':
       if (args.length < 3) return err('@set は「@set 名前 パラメータ 値」の形式です');
@@ -259,6 +270,30 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
     default:
       return err(`未知のコマンドです: @${head}`);
   }
+}
+
+/**
+ * 「名前… 数値 [名前… 数値 …]」のグループを解釈する（@damage/@heal/@mod 共通）。
+ * 数値の直前までに並んだ名前すべてにその数値が適用される
+ */
+function parseTargetGroups(
+  args: string[],
+): { targets: { name: string; amount: number }[] } | { error: string } {
+  const targets: { name: string; amount: number }[] = [];
+  let names: string[] = [];
+  for (const a of args) {
+    const n = Number(a);
+    if (a !== '' && Number.isFinite(n)) {
+      if (names.length === 0) return { error: '数値の前に対象キャラクター名が必要です' };
+      for (const name of names) targets.push({ name, amount: n });
+      names = [];
+    } else {
+      names.push(a);
+    }
+  }
+  if (names.length > 0) return { error: `「${names.join(' ')}」に適用する数値がありません` };
+  if (targets.length === 0) return { error: '対象キャラクター名と数値が必要です' };
+  return { targets };
 }
 
 /** @text の背景色引数（省略時は黒） */

@@ -98,8 +98,11 @@ export type ScriptCommand =
   | { type: 'se'; asset: string; volume?: number; line: number }
   | { type: 'show'; name: string; expression?: string; position?: StagePosition; flip?: boolean; line: number }
   | { type: 'hide'; name: string; line: number }
-  | { type: 'damage'; name: string; amount: number; line: number }
-  | { type: 'heal'; name: string; amount: number; line: number }
+  // ダメージ/回復。targets は「名前… 数値」の組（複数人・個別値に対応）
+  | { type: 'damage'; targets: { name: string; amount: number }[]; line: number }
+  | { type: 'heal'; targets: { name: string; amount: number }[]; line: number }
+  // HP以外のパラメータ増減（気力など）。amount は符号付き
+  | { type: 'mod'; param: string; targets: { name: string; amount: number }[]; line: number }
   | { type: 'set'; name: string; param: string; value: string; line: number }
   | { type: 'setglobal'; param: string; value: string; line: number }
   | { type: 'dice'; name?: string; spec: string; result: string; line: number }
@@ -144,9 +147,16 @@ export interface PortraitState {
   flipped?: boolean;
 }
 
-export interface DamagePopup {
+export interface DamagePopupEntry {
   characterName: string;
-  amount: number; // 正=ダメージ, 負=回復
+  /** 実際の増減量（負=減少/ダメージ、正=増加/回復） */
+  delta: number;
+}
+
+export interface DamagePopup {
+  /** null = HP（ダメージ/回復表記）。それ以外はパラメータ名（気力など） */
+  paramLabel: string | null;
+  entries: DamagePopupEntry[];
 }
 
 export interface DiceEffect {

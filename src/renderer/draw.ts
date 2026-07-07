@@ -1,4 +1,12 @@
-import type { Character, Cut, DiceEffect, GameTemplate, MapState, ParamValue } from '../types';
+import type {
+  Character,
+  Cut,
+  DamagePopup,
+  DiceEffect,
+  GameTemplate,
+  MapState,
+  ParamValue,
+} from '../types';
 
 export const CANVAS_W = 1280;
 export const CANVAS_H = 720;
@@ -717,32 +725,49 @@ function wrapText(
 
 // ============ 演出 ============
 
-function drawDamagePopup(
-  ctx: CanvasRenderingContext2D,
-  popup: { characterName: string; amount: number },
-): void {
-  const isHeal = popup.amount < 0;
-  const label = isHeal ? `+${-popup.amount}` : `-${popup.amount}`;
-  const sub = isHeal ? '回復！' : 'ダメージ！';
+function drawDamagePopup(ctx: CanvasRenderingContext2D, popup: DamagePopup): void {
+  // 同じ増減量ごとにまとめて1行にする（範囲攻撃で名前を並べる）
+  const groups = new Map<number, string[]>();
+  for (const e of popup.entries) {
+    const names = groups.get(e.delta) ?? [];
+    names.push(e.characterName);
+    groups.set(e.delta, names);
+  }
+  const rows = [...groups.entries()];
+  const multi = rows.length > 1;
+  const bigFont = multi ? 64 : 96;
+  const subFont = multi ? 24 : 30;
+  const rowH = bigFont + subFont + 40;
 
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const cx = CANVAS_W / 2;
-  const cy = CANVAS_H / 2 - 40;
+  const startY = CANVAS_H / 2 - 40 - ((rows.length - 1) * rowH) / 2;
 
-  ctx.font = `bold 96px ${FONT}`;
-  ctx.lineWidth = 10;
-  ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-  ctx.strokeText(label, cx, cy);
-  ctx.fillStyle = isHeal ? '#6dff9e' : '#ff5d5d';
-  ctx.fillText(label, cx, cy);
+  rows.forEach(([delta, names], i) => {
+    const cy = startY + i * rowH;
+    const up = delta > 0;
+    const label = popup.paramLabel
+      ? `${popup.paramLabel} ${up ? '+' : ''}${delta}`
+      : `${up ? '+' : ''}${delta}`;
+    const sub = popup.paramLabel
+      ? `${names.join('・')} の${popup.paramLabel}が${up ? '上昇' : '低下'}`
+      : `${names.join('・')} ${up ? 'は回復した！' : 'に ダメージ！'}`;
 
-  ctx.font = `bold 30px ${FONT}`;
-  ctx.lineWidth = 6;
-  ctx.strokeText(`${popup.characterName} に ${sub}`, cx, cy + 78);
-  ctx.fillStyle = '#fff';
-  ctx.fillText(`${popup.characterName} に ${sub}`, cx, cy + 78);
+    ctx.font = `bold ${bigFont}px ${FONT}`;
+    ctx.lineWidth = bigFont * 0.1;
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.strokeText(label, cx, cy);
+    ctx.fillStyle = up ? '#6dff9e' : '#ff5d5d';
+    ctx.fillText(label, cx, cy);
+
+    ctx.font = `bold ${subFont}px ${FONT}`;
+    ctx.lineWidth = subFont * 0.2;
+    ctx.strokeText(sub, cx, cy + bigFont * 0.55 + subFont * 0.7, CANVAS_W - 120);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(sub, cx, cy + bigFont * 0.55 + subFont * 0.7, CANVAS_W - 120);
+  });
   ctx.restore();
 }
 

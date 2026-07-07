@@ -320,16 +320,45 @@ export function buildCuts(
       }
       case 'damage':
       case 'heal': {
-        const entity = resolve(cmd.name);
-        if (!state.params[entity]) {
-          warnings.push({ line: cmd.line, message: `「${cmd.name}」は未登録のキャラクターです（@${cmd.type} は無視されます）` });
+        const entries: { characterName: string; delta: number }[] = [];
+        for (const target of cmd.targets) {
+          const entity = resolve(target.name);
+          if (!state.params[entity]) {
+            warnings.push({ line: cmd.line, message: `「${target.name}」は未登録のキャラクターです（@${cmd.type} は無視されます）` });
+            continue;
+          }
+          const delta = cmd.type === 'damage' ? -target.amount : target.amount;
+          applyDelta(state.params[entity], template.damageParamKey, delta);
+          // ポップ表示は脚本に書かれた名前のまま（村長→敵兵士のような文脈を尊重）
+          entries.push({ characterName: target.name, delta });
+        }
+        if (entries.length === 0) break;
+        pendingDamage = { paramLabel: null, entries };
+        // ダメージ演出はそれ単体でも1カットにする（セリフなしでポップ表示）
+        pushCut(null, cmd.line);
+        break;
+      }
+      case 'mod': {
+        // HP以外のパラメータ増減（気力など）。ラベル/キーのどちらでも指定可
+        const def = template.characterParams.find(
+          (d) => d.key === cmd.param || d.label === cmd.param,
+        );
+        if (!def || def.kind === 'text') {
+          warnings.push({ line: cmd.line, message: `「${cmd.param}」は増減できるキャラクターパラメータではありません（@mod は無視されます）` });
           break;
         }
-        const delta = cmd.type === 'damage' ? -cmd.amount : cmd.amount;
-        applyDelta(state.params[entity], template.damageParamKey, delta);
-        // ポップ表示は脚本に書かれた名前のまま（村長→敵兵士のような文脈を尊重）
-        pendingDamage = { characterName: cmd.name, amount: cmd.type === 'damage' ? cmd.amount : -cmd.amount };
-        // ダメージ演出はそれ単体でも1カットにする（セリフなしでポップ表示）
+        const entries: { characterName: string; delta: number }[] = [];
+        for (const target of cmd.targets) {
+          const entity = resolve(target.name);
+          if (!state.params[entity]) {
+            warnings.push({ line: cmd.line, message: `「${target.name}」は未登録のキャラクターです（@mod は無視されます）` });
+            continue;
+          }
+          applyDelta(state.params[entity], def.key, target.amount);
+          entries.push({ characterName: target.name, delta: target.amount });
+        }
+        if (entries.length === 0) break;
+        pendingDamage = { paramLabel: def.label, entries };
         pushCut(null, cmd.line);
         break;
       }

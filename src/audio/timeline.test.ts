@@ -130,6 +130,58 @@ describe('@still（一枚絵）とSE連動のカット尺', () => {
   });
 });
 
+describe('複数対象のダメージ・回復・@mod', () => {
+  const mkChar = (name: string): Character => ({
+    id: name,
+    name,
+    portraits: {},
+    defaultExpression: 'default',
+    params: {
+      hp: { kind: 'pair', current: 10, max: 10 },
+      mp: { kind: 'pair', current: 3, max: 3 },
+    },
+    showInStatusBar: true,
+  });
+
+  it('「名前… 数値」のグループで複数人に別々のダメージが入る', () => {
+    const { commands, errors } = parseScript('@damage A B 5 C 3');
+    expect(errors).toEqual([]);
+    const { cuts, warnings } = buildCuts(commands, [mkChar('A'), mkChar('B'), mkChar('C')], mazeKingdomTemplate, {});
+    expect(warnings).toEqual([]);
+    const snap = cuts[0].paramsSnapshot;
+    expect(snap.A.hp).toMatchObject({ current: 5 });
+    expect(snap.B.hp).toMatchObject({ current: 5 });
+    expect(snap.C.hp).toMatchObject({ current: 7 });
+    expect(cuts[0].damagePopup).toEqual({
+      paramLabel: null,
+      entries: [
+        { characterName: 'A', delta: -5 },
+        { characterName: 'B', delta: -5 },
+        { characterName: 'C', delta: -3 },
+      ],
+    });
+  });
+
+  it('@mod 気力 で複数人の気力を増減できる（ラベル指定・上限クランプ）', () => {
+    const { commands, errors } = parseScript('@mod 気力 A -1 B +2');
+    expect(errors).toEqual([]);
+    const { cuts, warnings } = buildCuts(commands, [mkChar('A'), mkChar('B')], mazeKingdomTemplate, {});
+    expect(warnings).toEqual([]);
+    expect(cuts[0].paramsSnapshot.A.mp).toMatchObject({ current: 2 });
+    expect(cuts[0].paramsSnapshot.B.mp).toMatchObject({ current: 3 }); // 最大値でクランプ
+    expect(cuts[0].damagePopup?.paramLabel).toBe('気力');
+  });
+
+  it('不正な形式はエラー・未登録名は警告', () => {
+    expect(parseScript('@damage 5').errors).toHaveLength(1); // 名前なし
+    expect(parseScript('@damage A').errors).toHaveLength(1); // 数値なし
+    expect(parseScript('@mod 気力 A 0').errors).toHaveLength(1); // 増減0
+    const { commands } = parseScript('@damage A 誰か 5');
+    const { warnings } = buildCuts(commands, [mkChar('A')], mazeKingdomTemplate, {});
+    expect(warnings).toHaveLength(1);
+  });
+});
+
 describe('@text ブロック（テキスト画面）', () => {
   it('@end までの行を字下げ・空行込みで収集し、@text off で解除する', () => {
     const src = [
