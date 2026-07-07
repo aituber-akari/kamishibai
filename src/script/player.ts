@@ -26,6 +26,7 @@ interface FoldState {
   statusVisible: boolean;
   map: MapState | null;
   still: { asset: string; bgColor: string } | null;
+  textScreen: { lines: string[]; bgColor: string } | null;
   portraits: PortraitState[];
   params: Record<string, Record<string, ParamValue>>;
   globals: Record<string, ParamValue>;
@@ -53,6 +54,7 @@ export function buildCuts(
     statusVisible: true,
     map: null,
     still: null,
+    textScreen: null,
     portraits: [],
     params: Object.fromEntries(characters.map((c) => [c.name, structuredClone(c.params)])),
     globals: structuredClone(globalParams),
@@ -92,6 +94,9 @@ export function buildCuts(
       bgmFadeOutSeconds: pendingBgmFadeOut,
       se: pendingSe,
       still: state.still ? { ...state.still } : null,
+      textScreen: state.textScreen
+        ? { lines: [...state.textScreen.lines], bgColor: state.textScreen.bgColor }
+        : null,
       map: structuredClone(state.map),
       portraits: state.portraits.map((p) => ({ ...p })),
       statusVisible: state.statusVisible,
@@ -272,6 +277,15 @@ export function buildCuts(
         pushCut(null, cmd.line);
         break;
       }
+      case 'text':
+        if (cmd.lines === null) {
+          // 解除はカットを作らない（次のセリフ等から通常シーンに戻る）
+          state.textScreen = null;
+          break;
+        }
+        state.textScreen = { lines: cmd.lines, bgColor: cmd.bgColor };
+        pushCut(null, cmd.line);
+        break;
       case 'show': {
         const ch = charByName.get(cmd.name);
         const entity = resolve(cmd.name);

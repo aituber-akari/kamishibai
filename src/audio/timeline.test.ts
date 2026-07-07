@@ -130,6 +130,34 @@ describe('@still（一枚絵）とSE連動のカット尺', () => {
   });
 });
 
+describe('@text ブロック（テキスト画面）', () => {
+  it('@end までの行を字下げ・空行込みで収集し、@text off で解除する', () => {
+    const src = [
+      '@text black',
+      '@c ～お宝表～',
+      '',
+      '天狗：',
+      '　木の素材10個   ',
+      '@end',
+      '@text off',
+      'GM: 以上だ',
+    ].join('\n');
+    const { commands, errors } = parseScript(src);
+    expect(errors).toEqual([]);
+    const { cuts } = buildCuts(commands, chars, mazeKingdomTemplate, {});
+    expect(cuts).toHaveLength(2);
+    expect(cuts[0].textScreen).toEqual({
+      bgColor: 'black',
+      lines: ['@c ～お宝表～', '', '天狗：', '　木の素材10個'], // 字下げ保持・行末空白除去
+    });
+    expect(cuts[1].textScreen).toBeNull();
+  });
+
+  it('@end が無ければエラー', () => {
+    expect(parseScript('@text\nこんにちは').errors).toHaveLength(1);
+  });
+});
+
 describe('parser 音声オプション', () => {
   it('不正な音量・fade指定はエラーになる', () => {
     expect(parseScript('@bgm a.mp3 1.5').errors).toHaveLength(1);

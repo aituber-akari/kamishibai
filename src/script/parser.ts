@@ -25,6 +25,31 @@ export function parseScript(source: string): ParseResult {
     // 行中コメントはコマンド行（@）でのみ許可する
     if (raw === '' || raw.startsWith('#') || raw.startsWith('＃')) continue;
 
+    // @text ブロック: @end までの行を字下げ・空行込みでそのまま収集する
+    const textStart = raw.match(/^[@＠]text(?:\s+(.*))?$/);
+    if (textStart && textStart[1]?.trim() !== 'off') {
+      const bgColor = parseTextBg(textStart[1]?.trim(), lineNo, errors);
+      const body: string[] = [];
+      let closed = false;
+      while (i + 1 < lines.length) {
+        i++;
+        if (/^[@＠]end\s*$/.test(lines[i].trim())) {
+          closed = true;
+          break;
+        }
+        body.push(lines[i].replace(/\s+$/, ''));
+      }
+      if (!closed) {
+        errors.push({ line: lineNo, message: '@text に対応する @end がありません' });
+        continue;
+      }
+      // 先頭・末尾の空行は落とす（間の空行は行間として維持）
+      while (body.length > 0 && body[0] === '') body.shift();
+      while (body.length > 0 && body[body.length - 1] === '') body.pop();
+      commands.push({ type: 'text', lines: body, bgColor, line: lineNo });
+      continue;
+    }
+
     if (raw.startsWith('@') || raw.startsWith('＠')) {
       raw = raw.replace(/\s[#＃].*$/, '').trim();
       const cmd = parseCommand(raw, lineNo, errors);
@@ -214,6 +239,10 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
       }
       return { type: 'still', asset: args[0], audio, seconds, bgColor, line };
     }
+    case 'text':
+      // ブロック開始はメインループで処理済み。ここに来るのは「@text off」のみ
+      if (args[0] === 'off') return { type: 'text', lines: null, bgColor: 'black', line };
+      return err('@text は「@text [色] 〜 @end」のブロック、または「@text off」で使います');
     case 'wait': {
       const seconds = Number(args[0]);
       if (!Number.isFinite(seconds) || seconds <= 0) return err('@wait には正の秒数が必要です');
@@ -222,6 +251,16 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
     default:
       return err(`未知のコマンドです: @${head}`);
   }
+}
+
+/** @text の背景色引数（省略時は黒） */
+function parseTextBg(arg: string | undefined, line: number, errors: ParseError[]): string {
+  if (!arg) return 'black';
+  if (arg === 'white' || arg === '白') return 'white';
+  if (arg === 'black' || arg === '黒') return 'black';
+  if (/^#[0-9a-fA-F]{6}$/.test(arg)) return arg;
+  errors.push({ line, message: `@text: 解釈できない背景色です: ${arg}（white/black/#rrggbb）` });
+  return 'black';
 }
 
 /** 既定のフェード秒（「fade」とだけ書いたとき） */

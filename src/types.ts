@@ -115,6 +115,9 @@ export type ScriptCommand =
   // 一枚絵（スチル）表示。ロゴ・タイトルカード・イベント絵など。asset null = 解除。
   // audio指定時はカット尺が音声の長さになる
   | { type: 'still'; asset: string | null; audio?: string; seconds?: number; bgColor: string; line: number }
+  // テキスト画面（@text 色 〜 @end のブロック）。lines null = 解除。
+  // 行頭 @c は中央寄せ。立ち絵は表示されたまま重なる
+  | { type: 'text'; lines: string[] | null; bgColor: string; line: number }
   | { type: 'status'; visible: boolean; line: number }
   | { type: 'wait'; seconds: number; line: number }
   | { type: 'say'; name: string; expression?: string; text: string; line: number };
@@ -210,6 +213,11 @@ export interface Cut {
    * 描かず、背景色＋中央配置の画像だけを描く。@still off まで持続する
    */
   still: { asset: string; bgColor: string } | null;
+  /**
+   * テキスト画面（お宝表・キャラ紹介など）。背景色＋テキストブロックを描き、
+   * 立ち絵はそのまま重なる（ステータスバー・メッセージ窓は隠れる）。@text off まで持続
+   */
+  textScreen: { lines: string[]; bgColor: string } | null;
   /** 戦闘マップ／ダンジョンマップ（背景とは別レイヤー） */
   map: MapState | null;
   portraits: PortraitState[];

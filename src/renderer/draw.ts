@@ -54,6 +54,18 @@ export function drawCut(
     return;
   }
 
+  // テキスト画面（お宝表・キャラ紹介など）: 背景色＋テキスト。立ち絵と演出は重なる
+  if (cut.textScreen) {
+    ctx.fillStyle = `rgb(${fadeRgb(cut.textScreen.bgColor)})`;
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    drawPortraits(ctx, cut, images, characters);
+    drawTextScreen(ctx, cut.textScreen);
+    if (cut.dice) drawDice(ctx, cut.dice, images, characters, options);
+    if (cut.damagePopup) drawDamagePopup(ctx, cut.damagePopup);
+    drawSceneFade(ctx, cut, options);
+    return;
+  }
+
   drawBackground(ctx, cut, images);
   if (cut.map) drawMap(ctx, cut.map, images, characters, cut.displayNames, template);
   drawPortraits(ctx, cut, images, characters);
@@ -78,6 +90,43 @@ function drawStill(
   const w = img.width * scale;
   const h = img.height * scale;
   ctx.drawImage(img, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h);
+}
+
+/**
+ * テキスト画面（@text ブロック）。行頭「@c 」は中央寄せ。
+ * 文字色は背景の明度から白/黒を自動選択する
+ */
+function drawTextScreen(
+  ctx: CanvasRenderingContext2D,
+  screen: { lines: string[]; bgColor: string },
+): void {
+  const lines = screen.lines;
+  if (lines.length === 0) return;
+
+  // 行数が多いほどフォントを小さく（上下マージン込みで収める）
+  const fontSize = Math.max(18, Math.min(36, Math.floor((CANVAS_H * 0.88) / (lines.length * 1.55))));
+  const lineHeight = fontSize * 1.55;
+  ctx.save();
+  ctx.font = `bold ${fontSize}px ${FONT}`;
+  ctx.textBaseline = 'top';
+
+  // 背景の明度で文字色を自動選択（白背景なら黒文字）
+  const [r, g, b] = fadeRgb(screen.bgColor).split(',').map(Number);
+  ctx.fillStyle = 0.299 * r + 0.587 * g + 0.114 * b > 140 ? '#111' : '#f4f4f4';
+
+  const parsed = lines.map((line) => {
+    const centered = /^@c\s+/.test(line.trim());
+    return { text: centered ? line.trim().replace(/^@c\s+/, '') : line, centered };
+  });
+  const maxW = Math.max(...parsed.map((l) => ctx.measureText(l.text).width));
+  const blockX = Math.max(70, (CANVAS_W - maxW) / 2);
+  const startY = Math.max(36, (CANVAS_H - lines.length * lineHeight) / 2);
+
+  parsed.forEach((l, i) => {
+    const x = l.centered ? (CANVAS_W - ctx.measureText(l.text).width) / 2 : blockX;
+    ctx.fillText(l.text, x, startY + i * lineHeight, CANVAS_W - 100);
+  });
+  ctx.restore();
 }
 
 /** フェード色（black/white/#rrggbb）→ RGB値 */
