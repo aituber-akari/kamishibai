@@ -78,7 +78,10 @@ export type ScriptCommand =
   | { type: 'setglobal'; param: string; value: string; line: number }
   | { type: 'dice'; name?: string; spec: string; result: string; line: number }
   | { type: 'map'; asset: string | null; line: number } // null = 非表示
+  | { type: 'bf'; lanes: string[] | null; line: number } // 生成戦場マップ。null = 非表示
+  | { type: 'lane'; index: number; label?: string; state?: Lane['state']; line: number }
   | { type: 'chip'; name: string; x: number | null; y: number | null; line: number } // null = 撤去
+  | { type: 'mark'; x: number; y: number; text: string | null; line: number } // null = 撤去
   | { type: 'status'; visible: boolean; line: number }
   | { type: 'wait'; seconds: number; line: number }
   | { type: 'say'; name: string; expression?: string; text: string; line: number };
@@ -114,18 +117,33 @@ export interface DiceEffect {
   characterName?: string;
 }
 
-/** マップ上のキャラチップ。座標はマップ画像に対する百分率（0-100） */
+/**
+ * マップ上のキャラチップ。
+ * 画像マップでは百分率（0-100）、生成戦場マップでは列・行（1始まり、小数可）
+ */
 export interface ChipState {
   characterName: string;
   x: number;
   y: number;
 }
 
-/** 戦闘マップ／ダンジョンマップの表示状態 */
-export interface MapState {
-  asset: string;
-  chips: ChipState[];
+/** マップ上のマーカー（「死」「天」「鴉」等の白札）。座標はチップと同じ規則 */
+export interface MapMark {
+  x: number;
+  y: number;
+  text: string;
 }
+
+/** 生成戦場マップの列（レーン）。state が戦場トラップの発動状態を表すパラメータ */
+export interface Lane {
+  label: string;
+  state: 'normal' | 'danger';
+}
+
+/** 戦闘マップ／ダンジョンマップの表示状態 */
+export type MapState =
+  | { kind: 'image'; asset: string; chips: ChipState[]; marks: MapMark[] }
+  | { kind: 'lanes'; lanes: Lane[]; rows: number; chips: ChipState[]; marks: MapMark[] };
 
 /** 1カット = プレビュー/動画の1画面ぶんの完全な描画状態 */
 export interface Cut {

@@ -3,6 +3,9 @@ import type { Character, Cut, DiceEffect, GameTemplate, MapState, ParamValue } f
 export const CANVAS_W = 1280;
 export const CANVAS_H = 720;
 
+/** ステータスバーの高さ */
+const BAR_H = 132;
+
 /** アセット名（相対パス）→ 読み込み済み画像 */
 export type ImageStore = Map<string, HTMLImageElement>;
 
@@ -110,22 +113,40 @@ function drawPortraits(
 
 // ============ 戦闘マップ／ダンジョンマップ ============
 
+// 表示領域: ステータスバーの下〜メッセージウィンドウの上、左は立ち絵ぶんを空ける
+const MAP_AREA = { x: 320, y: BAR_H + 16, w: CANVAS_W - 320 - 24, h: CANVAS_H - BAR_H - 16 - 230 };
+
+/** チップ/マーカーの論理座標 → キャンバス座標と基準サイズへの変換 */
+interface MapGeometry {
+  toX: (x: number) => number;
+  toY: (y: number) => number;
+  unit: number;
+}
+
 function drawMap(
   ctx: CanvasRenderingContext2D,
   map: MapState,
   images: ImageStore,
   characters: Character[],
 ): void {
-  const img = findImage(images, map.asset);
-  if (!img) return;
+  const geo = map.kind === 'image' ? drawImageMap(ctx, map, images) : drawLanesMap(ctx, map);
+  if (!geo) return;
+  drawChips(ctx, map, images, characters, geo);
+  drawMarks(ctx, map, geo);
+}
 
-  // 表示領域: ステータスバーの下〜メッセージウィンドウの上、左は立ち絵ぶんを空ける
-  const area = { x: 320, y: BAR_H + 16, w: CANVAS_W - 320 - 24, h: CANVAS_H - BAR_H - 16 - 230 };
-  const scale = Math.min(area.w / img.width, area.h / img.height);
+function drawImageMap(
+  ctx: CanvasRenderingContext2D,
+  map: Extract<MapState, { kind: 'image' }>,
+  images: ImageStore,
+): MapGeometry | null {
+  const img = findImage(images, map.asset);
+  if (!img) return null;
+  const scale = Math.min(MAP_AREA.w / img.width, MAP_AREA.h / img.height);
   const w = img.width * scale;
   const h = img.height * scale;
-  const x = area.x + (area.w - w) / 2;
-  const y = area.y + (area.h - h) / 2;
+  const x = MAP_AREA.x + (MAP_AREA.w - w) / 2;
+  const y = MAP_AREA.y + (MAP_AREA.h - h) / 2;
 
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.5)';
@@ -133,16 +154,107 @@ function drawMap(
   ctx.drawImage(img, x, y, w, h);
   ctx.restore();
 
-  // キャラチップ（座標はマップ画像に対する% 0-100）
+  // 画像マップの座標は% (0-100)
+  return { toX: (px) => x + (px / 100) * w, toY: (py) => y + (py / 100) * h, unit: h * 0.1 };
+}
+
+/**
+ * 素材不要の生成戦場マップ。列（レーン）＝縦帯として描画し、
+ * 状態 danger の列（戦場トラップ発動）は赤く塗る
+ */
+function drawLanesMap(
+  ctx: CanvasRenderingContext2D,
+  map: Extract<MapState, { kind: 'lanes' }>,
+): MapGeometry | null {
+  const n = map.lanes.length;
+  if (n === 0) return null;
+  const gap = 10;
+  const laneW = Math.min(150, (MAP_AREA.w - gap * (n - 1)) / n);
+  const totalW = laneW * n + gap * (n - 1);
+  const startX = MAP_AREA.x + (MAP_AREA.w - totalW) / 2;
+  const laneH = MAP_AREA.h;
+  const y = MAP_AREA.y;
+  const cellH = laneH / map.rows;
+
+  ctx.save();
+  for (let i = 0; i < n; i++) {
+    const lane = map.lanes[i];
+    const x = startX + i * (laneW + gap);
+    const danger = lane.state === 'danger';
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = danger ? 'rgba(148, 28, 34, 0.94)' : 'rgba(148, 143, 152, 0.52)';
+    ctx.beginPath();
+    ctx.roundRect(x, y, laneW, laneH, 8);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.strokeStyle = danger ? 'rgba(255, 190, 190, 0.7)' : 'rgba(255,255,255,0.45)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(x, y, laneW, laneH, 8);
+    ctx.stroke();
+
+    // マス目（横線＋中央縦線）
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 1;
+    for (let r = 1; r < map.rows; r++) {
+      ctx.beginPath();
+      ctx.moveTo(x + 4, y + r * cellH);
+      ctx.lineTo(x + laneW - 4, y + r * cellH);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(x + laneW / 2, y + 4);
+    ctx.lineTo(x + laneW / 2, y + laneH - 4);
+    ctx.stroke();
+
+    // 縦書きラベル（透かし風）
+    ctx.fillStyle = danger ? 'rgba(255, 226, 226, 0.5)' : 'rgba(255,255,255,0.5)';
+    const chars = [...lane.label];
+    const fontSize = Math.min(laneW * 0.5, (laneH - 24) / Math.max(chars.length, 1));
+    ctx.font = `bold ${fontSize}px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const textH = fontSize * chars.length;
+    chars.forEach((c, ci) => {
+      ctx.fillText(c, x + laneW / 2, y + (laneH - textH) / 2 + fontSize * (ci + 0.5));
+    });
+  }
+  ctx.restore();
+
+  // 生成マップの座標は列・行（1始まり、小数でマス内の位置を指定可）
+  const toX = (lx: number) => {
+    const lane = Math.max(1, Math.min(n, Math.floor(lx)));
+    const frac = lx - Math.floor(lx);
+    return startX + (lane - 1) * (laneW + gap) + (frac === 0 ? 0.5 : frac) * laneW;
+  };
+  const toY = (ry: number) => {
+    const row = Math.max(1, Math.min(map.rows, Math.floor(ry)));
+    const frac = ry - Math.floor(ry);
+    return y + (frac === 0 ? row - 0.5 : row - 1 + frac) * cellH;
+  };
+  return { toX, toY, unit: cellH * 0.82 };
+}
+
+function drawChips(
+  ctx: CanvasRenderingContext2D,
+  map: MapState,
+  images: ImageStore,
+  characters: Character[],
+  geo: MapGeometry,
+): void {
   const charByName = new Map(characters.map((c) => [c.name, c]));
   for (const chip of map.chips) {
     const ch = charByName.get(chip.characterName);
     if (!ch) continue;
     const asset = ch.chipImage ?? ch.faceIcon;
     const chipImg = asset ? findImage(images, asset) : undefined;
-    const cx = x + (chip.x / 100) * w;
-    const cy = y + (chip.y / 100) * h;
-    const size = Math.max(24, h * 0.1) * (ch.chipScale ?? 1);
+    const cx = geo.toX(chip.x);
+    const cy = geo.toY(chip.y);
+    const size = Math.max(24, geo.unit) * (ch.chipScale ?? 1);
     if (chipImg) {
       const s = size / Math.max(chipImg.width, chipImg.height);
       ctx.drawImage(
@@ -169,6 +281,37 @@ function drawMap(
   }
 }
 
+/** 「死」「天」「鴉」等の白札マーカー。複数文字は縦書き */
+function drawMarks(ctx: CanvasRenderingContext2D, map: MapState, geo: MapGeometry): void {
+  ctx.save();
+  for (const mark of map.marks) {
+    const cx = geo.toX(mark.x);
+    const cy = geo.toY(mark.y);
+    const chars = [...mark.text];
+    const fontSize = Math.max(16, geo.unit * 0.55);
+    const pad = fontSize * 0.18;
+    const w = fontSize + pad * 2;
+    const h = fontSize * chars.length + pad * 2;
+
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.rect(cx - w / 2, cy - h / 2, w, h);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#111';
+    ctx.font = `bold ${fontSize}px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    chars.forEach((c, ci) => {
+      ctx.fillText(c, cx, cy - h / 2 + pad + fontSize * (ci + 0.5));
+    });
+  }
+  ctx.restore();
+}
+
 // ctx.filter はブラウザ実装差があり将来のOffscreenCanvas書き出しでリスクなので、
 // 暗色化はプリミティブ合成（source-atop）で行いキャッシュする
 const darkenCache = new WeakMap<HTMLImageElement, HTMLCanvasElement>();
@@ -189,8 +332,6 @@ function darkened(img: HTMLImageElement): HTMLCanvasElement {
 }
 
 // ============ ステータスバー ============
-
-const BAR_H = 132;
 
 function drawStatusBar(
   ctx: CanvasRenderingContext2D,

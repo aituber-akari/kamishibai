@@ -66,7 +66,7 @@ export function buildCuts(
       bg: state.bg,
       bgm: state.bgm,
       se: pendingSe,
-      map: state.map ? { asset: state.map.asset, chips: state.map.chips.map((c) => ({ ...c })) } : null,
+      map: structuredClone(state.map),
       portraits: state.portraits.map((p) => ({ ...p })),
       statusVisible: state.statusVisible,
       paramsSnapshot: structuredClone(state.params),
@@ -97,12 +97,41 @@ export function buildCuts(
         state.statusVisible = cmd.visible;
         break;
       case 'map':
-        // マップを消すとチップも消える。マップ差し替え時はチップを維持する
-        state.map = cmd.asset === null ? null : { asset: cmd.asset, chips: state.map?.chips ?? [] };
+        // マップを消すとチップ・マーカーも消える。差し替え時は維持する
+        state.map =
+          cmd.asset === null
+            ? null
+            : { kind: 'image', asset: cmd.asset, chips: state.map?.chips ?? [], marks: state.map?.marks ?? [] };
         break;
+      case 'bf':
+        state.map =
+          cmd.lanes === null
+            ? null
+            : {
+                kind: 'lanes',
+                lanes: cmd.lanes.map((label) => ({ label, state: 'normal' as const })),
+                rows: 5,
+                chips: state.map?.chips ?? [],
+                marks: state.map?.marks ?? [],
+              };
+        break;
+      case 'lane': {
+        if (state.map?.kind !== 'lanes') {
+          warnings.push({ line: cmd.line, message: '@lane は @bf で生成した戦場マップに対して使います' });
+          break;
+        }
+        const lane = state.map.lanes[cmd.index - 1];
+        if (!lane) {
+          warnings.push({ line: cmd.line, message: `列 ${cmd.index} はありません（戦場は ${state.map.lanes.length} 列です）` });
+          break;
+        }
+        if (cmd.label) lane.label = cmd.label;
+        if (cmd.state) lane.state = cmd.state;
+        break;
+      }
       case 'chip': {
         if (!state.map) {
-          warnings.push({ line: cmd.line, message: '@chip の前に @map でマップを表示してください' });
+          warnings.push({ line: cmd.line, message: '@chip の前に @map か @bf でマップを表示してください' });
           break;
         }
         if (!charByName.has(cmd.name)) {
@@ -112,6 +141,17 @@ export function buildCuts(
         state.map.chips = state.map.chips.filter((c) => c.characterName !== cmd.name);
         if (cmd.x !== null && cmd.y !== null) {
           state.map.chips.push({ characterName: cmd.name, x: cmd.x, y: cmd.y });
+        }
+        break;
+      }
+      case 'mark': {
+        if (!state.map) {
+          warnings.push({ line: cmd.line, message: '@mark の前に @map か @bf でマップを表示してください' });
+          break;
+        }
+        state.map.marks = state.map.marks.filter((m) => m.x !== cmd.x || m.y !== cmd.y);
+        if (cmd.text !== null) {
+          state.map.marks.push({ x: cmd.x, y: cmd.y, text: cmd.text });
         }
         break;
       }

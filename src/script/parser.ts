@@ -104,6 +104,33 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
     case 'map':
       if (!args[0]) return err('@map にはマップ画像のファイル名か off が必要です');
       return { type: 'map', asset: args[0] === 'off' ? null : args[0], line };
+    case 'bf':
+      // 生成戦場マップ:「@bf 地雷原 地雷原 敵前衛 敵後衛」列ラベルを並べる。@bf off で消去
+      if (!args[0]) return err('@bf は「@bf 列1ラベル 列2ラベル …」または「@bf off」の形式です');
+      if (args[0] === 'off') return { type: 'bf', lanes: null, line };
+      return { type: 'bf', lanes: args, line };
+    case 'lane': {
+      // 「@lane 2 danger」「@lane 2 罠原 danger」「@lane 2 罠原」— 戦場トラップの発動等
+      const index = Number(args[0]);
+      if (!Number.isInteger(index) || index < 1)
+        return err('@lane は「@lane 列番号 [ラベル] [danger|normal]」の形式です（列番号は1始まり）');
+      let label: string | undefined;
+      let state: 'normal' | 'danger' | undefined;
+      for (const a of args.slice(1)) {
+        if (a === 'danger' || a === 'normal') state = a;
+        else label = a;
+      }
+      if (!label && !state) return err('@lane にはラベルか状態（danger/normal）のどちらかが必要です');
+      return { type: 'lane', index, label, state, line };
+    }
+    case 'mark': {
+      // 「@mark 3 2 死」「@mark 3 2 off」— 白札マーカー
+      const x = Number(args[0]);
+      const y = Number(args[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !args[2])
+        return err('@mark は「@mark x y テキスト」または「@mark x y off」の形式です');
+      return { type: 'mark', x, y, text: args[2] === 'off' ? null : args.slice(2).join(' '), line };
+    }
     case 'chip': {
       // 「@chip 名前 x y」（x,y はマップに対する% 0-100）または「@chip 名前 off」
       if (!args[0]) return err('@chip は「@chip 名前 x y」または「@chip 名前 off」の形式です');
