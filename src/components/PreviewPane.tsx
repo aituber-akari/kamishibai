@@ -93,7 +93,13 @@ export function PreviewPane({
     }
 
     const options = { defaultDiceFolder, diceAnimation };
-    if (!cut.dice || !diceAnimation) {
+    // 時間演出（ダイス・暗転・明転）があるカットは経過時間で描き直す
+    const animateUntil = Math.max(
+      cut.dice && diceAnimation ? DICE_ROLL_SECONDS + 0.1 : 0,
+      cut.fadeInSeconds ?? 0,
+      cut.fadeOutSeconds ?? 0,
+    );
+    if (animateUntil === 0) {
       drawCut(ctx, cut, images, characters, template, options);
       return;
     }
@@ -103,7 +109,7 @@ export function PreviewPane({
     const tick = () => {
       const t = (performance.now() - start) / 1000;
       drawCut(ctx, cut, images, characters, template, { ...options, timeInCut: t });
-      if (t < DICE_ROLL_SECONDS + 0.1) raf = requestAnimationFrame(tick);
+      if (t < animateUntil) raf = requestAnimationFrame(tick);
     };
     tick();
     return () => cancelAnimationFrame(raf);

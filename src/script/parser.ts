@@ -173,6 +173,14 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
     case 'status':
       if (args[0] !== 'on' && args[0] !== 'off') return err('@status は on か off を指定してください');
       return { type: 'status', visible: args[0] === 'on', line };
+    case 'fadeout':
+    case 'fadein': {
+      // 「@fadeout [秒]」「@fadein [秒]」既定1秒。シーン切替の暗転・明転
+      const seconds = args[0] === undefined ? 1 : Number(args[0]);
+      if (!Number.isFinite(seconds) || seconds <= 0)
+        return err(`@${head} の秒数は正の数で指定してください`);
+      return { type: head, seconds, line };
+    }
     case 'wait': {
       const seconds = Number(args[0]);
       if (!Number.isFinite(seconds) || seconds <= 0) return err('@wait には正の秒数が必要です');

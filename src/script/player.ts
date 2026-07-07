@@ -74,6 +74,10 @@ export function buildCuts(
   let pendingWait: number | null = null;
   // 直前BGMのフェードアウト（@bgm 切替/stop に fade 指定があったとき、次のカットに記録）
   let pendingBgmFadeOut: number | null = null;
+  // 次のカットを暗転から始める（@fadein）
+  let pendingFadeIn: number | null = null;
+  // このカット自体を暗転演出にする（@fadeout。pushCut 直前にのみ設定される）
+  let pendingFadeOut: number | null = null;
 
   const pushCut = (message: Cut['message'], line: number) => {
     cuts.push({
@@ -93,12 +97,16 @@ export function buildCuts(
       damagePopup: pendingDamage,
       dice: pendingDice,
       waitSeconds: pendingWait,
+      fadeInSeconds: pendingFadeIn,
+      fadeOutSeconds: pendingFadeOut,
     });
     pendingSe = null;
     pendingDamage = null;
     pendingDice = null;
     pendingWait = null;
     pendingBgmFadeOut = null;
+    pendingFadeIn = null;
+    pendingFadeOut = null;
   };
 
   for (const cmd of commands) {
@@ -222,6 +230,15 @@ export function buildCuts(
       }
       case 'wait':
         pendingWait = cmd.seconds;
+        break;
+      case 'fadeout':
+        // 暗転はそれ自体が1カット（現在のシーンが徐々に黒になる）
+        pendingWait = cmd.seconds;
+        pendingFadeOut = cmd.seconds;
+        pushCut(null, cmd.line);
+        break;
+      case 'fadein':
+        pendingFadeIn = cmd.seconds;
         break;
       case 'show': {
         const ch = charByName.get(cmd.name);

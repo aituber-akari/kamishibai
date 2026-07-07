@@ -84,6 +84,17 @@ describe('buildAudioTimeline', () => {
   });
 });
 
+describe('シーンのフェード（@fadeout / @fadein）', () => {
+  it('@fadeout は指定秒の暗転カットになり、@fadein は次カットに乗る', () => {
+    const cuts = cutsFrom(['A: 夜が更けた', '@fadeout 1', '@fadein 1.5', 'A: 翌朝'].join('\n'));
+    expect(cuts).toHaveLength(3);
+    expect(cuts[1]).toMatchObject({ fadeOutSeconds: 1, waitSeconds: 1, message: null });
+    expect(cuts[2]).toMatchObject({ fadeInSeconds: 1.5, fadeOutSeconds: null });
+    // 暗転カットの1秒ぶん、総尺にも反映される
+    expect(cutTimings(cuts)[2].start).toBeCloseTo(DEFAULT_CUT_SECONDS + 1);
+  });
+});
+
 describe('parser 音声オプション', () => {
   it('不正な音量・fade指定はエラーになる', () => {
     expect(parseScript('@bgm a.mp3 1.5').errors).toHaveLength(1);
