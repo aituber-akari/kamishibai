@@ -440,12 +440,19 @@ function drawChips(
         chipImg.height * s,
       );
     } else {
-      // チップ画像がない場合は名前入りのプレースホルダ
+      // チップ画像がない場合は名前入りのプレースホルダ。
+      // 敵味方はレーンと同じ青系/暖色系の色相ペアで塗り分け、
+      // 色覚多様性に配慮して形でも区別する（味方＝丸、敵＝角丸四角）
+      const isAlly = !!ch && ch.showInStatusBar;
       ctx.save();
-      ctx.fillStyle = 'rgba(88, 101, 242, 0.9)';
+      ctx.fillStyle = isAlly ? 'rgba(58, 106, 186, 0.92)' : 'rgba(178, 80, 46, 0.92)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
+      if (isAlly) ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
+      else ctx.roundRect(cx - size / 2, cy - size / 2, size, size, size * 0.18);
       ctx.fill();
+      ctx.stroke();
       ctx.fillStyle = '#fff';
       ctx.font = `bold ${Math.max(11, size * 0.32)}px ${FONT}`;
       ctx.textAlign = 'center';
