@@ -93,6 +93,7 @@ export type ScriptCommand =
   | { type: 'map'; asset: string | null; line: number } // null = 非表示
   | { type: 'bf'; lanes: string[] | null; line: number } // 生成戦場マップ。null = 非表示
   | { type: 'lane'; index: number; label?: string; state?: Lane['state']; line: number }
+  | { type: 'trap'; index: number; label: string | null; line: number } // null = 解除（元ラベルに戻す）
   | { type: 'chip'; name: string; x: number | null; y: number | null; line: number } // null = 撤去
   | { type: 'mark'; x: number; y: number; text: string | null; line: number } // null = 撤去
   | { type: 'name'; name: string; newName: string; line: number } // 恒常表示名の変更
@@ -154,6 +155,8 @@ export interface MapMark {
 export interface Lane {
   label: string;
   state: 'normal' | 'danger';
+  /** @bf 時点の元ラベル。@trap 解除時にここへ戻す */
+  originalLabel: string;
 }
 
 /** 戦闘マップ／ダンジョンマップの表示状態 */

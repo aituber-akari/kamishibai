@@ -135,11 +135,30 @@ export function buildCuts(
         const labels = cmd.lanes.length > 0 ? cmd.lanes : DEFAULT_BATTLEFIELD_LANES;
         state.map = {
           kind: 'lanes',
-          lanes: labels.map((label) => ({ label, state: 'normal' as const })),
+          lanes: labels.map((label) => ({ label, state: 'normal' as const, originalLabel: label })),
           rows: 5,
           chips: state.map?.chips ?? [],
           marks: state.map?.marks ?? [],
         };
+        break;
+      }
+      case 'trap': {
+        if (state.map?.kind !== 'lanes') {
+          warnings.push({ line: cmd.line, message: '@trap は @bf で生成した戦場マップに対して使います' });
+          break;
+        }
+        const lane = state.map.lanes[cmd.index - 1];
+        if (!lane) {
+          warnings.push({ line: cmd.line, message: `列 ${cmd.index} はありません（戦場は ${state.map.lanes.length} 列です）` });
+          break;
+        }
+        if (cmd.label === null) {
+          lane.label = lane.originalLabel;
+          lane.state = 'normal';
+        } else {
+          lane.label = cmd.label;
+          lane.state = 'danger';
+        }
         break;
       }
       case 'lane': {

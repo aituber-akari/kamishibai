@@ -127,6 +127,13 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
       if (!label && !state) return err('@lane にはラベルか状態（danger/normal）のどちらかが必要です');
       return { type: 'lane', index, label, state, line };
     }
+    case 'trap': {
+      // 「@trap 3 地雷原」— 列3を改名して危険表示に。「@trap 3 off」で元の名前に戻して解除
+      const index = Number(args[0]);
+      if (!Number.isInteger(index) || index < 1 || !args[1])
+        return err('@trap は「@trap 列番号 罠名」または「@trap 列番号 off」の形式です');
+      return { type: 'trap', index, label: args[1] === 'off' ? null : args.slice(1).join(' '), line };
+    }
     case 'mark': {
       // 「@mark 3 2 死」「@mark 3 2 off」— 白札マーカー
       const x = Number(args[0]);
