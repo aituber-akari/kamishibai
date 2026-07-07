@@ -243,6 +243,14 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
       // ブロック開始はメインループで処理済み。ここに来るのは「@text off」のみ
       if (args[0] === 'off') return { type: 'text', lines: null, bgColor: 'black', line };
       return err('@text は「@text [色] 〜 @end」のブロック、または「@text off」で使います');
+    case 'fontsize': {
+      // 「@fontsize 2.5」メッセージ文字の倍率。「@fontsize 1」「@fontsize off」で戻す
+      if (args[0] === 'off') return { type: 'fontsize', scale: 1, line };
+      const scale = Number(args[0]);
+      if (!Number.isFinite(scale) || scale < 0.5 || scale > 5)
+        return err('@fontsize は 0.5〜5 の倍率か off を指定してください');
+      return { type: 'fontsize', scale, line };
+    }
     case 'wait': {
       const seconds = Number(args[0]);
       if (!Number.isFinite(seconds) || seconds <= 0) return err('@wait には正の秒数が必要です');

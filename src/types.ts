@@ -118,6 +118,7 @@ export type ScriptCommand =
   // テキスト画面（@text 色 〜 @end のブロック）。lines null = 解除。
   // 行頭 @c は中央寄せ。立ち絵は表示されたまま重なる
   | { type: 'text'; lines: string[] | null; bgColor: string; line: number }
+  | { type: 'fontsize'; scale: number; line: number } // メッセージ文字の倍率（サムネ用の巨大文字など）
   | { type: 'status'; visible: boolean; line: number }
   | { type: 'wait'; seconds: number; line: number }
   | { type: 'say'; name: string; expression?: string; text: string; line: number };
@@ -228,6 +229,8 @@ export interface Cut {
   displayNames: Record<string, string>;
   globalSnapshot: Record<string, ParamValue>;
   message: { speaker: string; text: string } | null;
+  /** メッセージ本文の文字倍率（@fontsize。サムネ用の巨大文字など。既定1） */
+  messageScale: number;
   damagePopup: DamagePopup | null;
   dice: DiceEffect | null;
   /** 表示時間（秒）。wait 指定がなければ再生側の既定値 */

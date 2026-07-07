@@ -27,6 +27,7 @@ interface FoldState {
   map: MapState | null;
   still: { asset: string; bgColor: string } | null;
   textScreen: { lines: string[]; bgColor: string } | null;
+  messageScale: number;
   portraits: PortraitState[];
   params: Record<string, Record<string, ParamValue>>;
   globals: Record<string, ParamValue>;
@@ -55,6 +56,7 @@ export function buildCuts(
     map: null,
     still: null,
     textScreen: null,
+    messageScale: 1,
     portraits: [],
     params: Object.fromEntries(characters.map((c) => [c.name, structuredClone(c.params)])),
     globals: structuredClone(globalParams),
@@ -104,6 +106,7 @@ export function buildCuts(
       displayNames: { ...state.displayNames },
       globalSnapshot: structuredClone(state.globals),
       message,
+      messageScale: state.messageScale,
       damagePopup: pendingDamage,
       dice: pendingDice,
       waitSeconds: pendingWait,
@@ -277,6 +280,9 @@ export function buildCuts(
         pushCut(null, cmd.line);
         break;
       }
+      case 'fontsize':
+        state.messageScale = cmd.scale;
+        break;
       case 'text':
         if (cmd.lines === null) {
           // 解除はカットを作らない（次のセリフ等から通常シーンに戻る）

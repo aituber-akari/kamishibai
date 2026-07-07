@@ -72,7 +72,7 @@ export function drawCut(
   if (cut.statusVisible) drawStatusBar(ctx, cut, images, characters, template);
   if (cut.dice) drawDice(ctx, cut.dice, images, characters, options);
   if (cut.damagePopup) drawDamagePopup(ctx, cut.damagePopup);
-  if (cut.message) drawMessageWindow(ctx, cut.message);
+  if (cut.message) drawMessageWindow(ctx, cut.message, cut.messageScale);
   drawSceneFade(ctx, cut, options);
 }
 
@@ -638,6 +638,7 @@ function formatParam(v: ParamValue | undefined): string {
 function drawMessageWindow(
   ctx: CanvasRenderingContext2D,
   message: { speaker: string; text: string },
+  scale = 1,
 ): void {
   const margin = 24;
   const h = 170;
@@ -665,11 +666,21 @@ function drawMessageWindow(
   ctx.textBaseline = 'middle';
   ctx.fillText(message.speaker, x + 38, y);
 
-  // 本文（自動折り返し・最大3行。あふれた分は「…」で切ってウィンドウ外への描画を防ぐ）
-  ctx.font = `22px ${FONT}`;
+  // 本文（自動折り返し。あふれた分は「…」で切ってウィンドウ外への描画を防ぐ）
+  // @fontsize の倍率でサムネ用の巨大文字にも対応。行数はウィンドウに収まる範囲で自動計算
+  const fontSize = 22 * scale;
+  const lineHeight = fontSize * 1.55;
+  const maxLines = Math.max(1, Math.floor((h - 40) / lineHeight));
+  ctx.font = `${scale > 1.4 ? 'bold ' : ''}${fontSize}px ${FONT}`;
   ctx.textBaseline = 'top';
   ctx.fillStyle = '#f2f3f7';
-  wrapText(ctx, message.text, x + 30, y + 36, w - 60, 34, 3);
+  if (scale > 1.4) {
+    // 巨大文字は縁取りで視認性を上げる（サムネ映え）
+    ctx.lineWidth = fontSize * 0.12;
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    wrapText(ctx, message.text, x + 30, y + 36, w - 60, lineHeight, maxLines, true);
+  }
+  wrapText(ctx, message.text, x + 30, y + 36, w - 60, lineHeight, maxLines);
   ctx.restore();
 }
 
@@ -681,6 +692,7 @@ function wrapText(
   maxWidth: number,
   lineHeight: number,
   maxLines: number,
+  stroke = false,
 ): void {
   const lines: string[] = [];
   let line = '';
@@ -698,7 +710,8 @@ function wrapText(
   for (let i = 0; i < Math.min(lines.length, maxLines); i++) {
     const isLast = i === maxLines - 1;
     const t = clipped && isLast ? lines[i].slice(0, -1) + '…' : lines[i];
-    ctx.fillText(t, x, y + i * lineHeight);
+    if (stroke) ctx.strokeText(t, x, y + i * lineHeight);
+    else ctx.fillText(t, x, y + i * lineHeight);
   }
 }
 
