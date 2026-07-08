@@ -86,6 +86,9 @@ export function buildCuts(
   let pendingFadeIn: { seconds: number; color: string } | null = null;
   // このカット自体をフェード演出にする（@fadeout。pushCut 直前にのみ設定される）
   let pendingFadeOut: { seconds: number; color: string } | null = null;
+  // 直近に表示したセリフ。@dice/@damage 等の演出カットでメッセージ
+  // ウィンドウを空にせず、直前のセリフを出したまま重ねるために使う
+  let lastMessage: Cut['message'] = null;
 
   const pushCut = (message: Cut['message'], line: number) => {
     cuts.push({
@@ -115,6 +118,7 @@ export function buildCuts(
       fadeOutSeconds: pendingFadeOut?.seconds ?? null,
       fadeOutColor: pendingFadeOut?.color ?? null,
     });
+    if (message) lastMessage = message;
     pendingSe = null;
     pendingDamage = null;
     pendingDice = null;
@@ -341,8 +345,8 @@ export function buildCuts(
         }
         if (entries.length === 0) break;
         pendingDamage = { paramLabel: null, entries };
-        // ダメージ演出はそれ単体でも1カットにする（セリフなしでポップ表示）
-        pushCut(null, cmd.line);
+        // ダメージ演出はそれ単体で1カットにするが、直前のセリフは残して重ねる
+        pushCut(lastMessage, cmd.line);
         break;
       }
       case 'mod': {
@@ -366,7 +370,7 @@ export function buildCuts(
         }
         if (entries.length === 0) break;
         pendingDamage = { paramLabel: def.label, entries };
-        pushCut(null, cmd.line);
+        pushCut(lastMessage, cmd.line);
         break;
       }
       case 'set': {
@@ -401,7 +405,7 @@ export function buildCuts(
           const duration = audioDuration?.(pendingSe.asset);
           if (duration !== undefined) pendingWait = duration;
         }
-        pushCut(null, cmd.line);
+        pushCut(lastMessage, cmd.line);
         break;
       }
       case 'say': {

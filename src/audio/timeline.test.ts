@@ -204,6 +204,41 @@ describe('戦場チップ（未登録の敵・滑走移動）', () => {
   });
 });
 
+describe('演出カット（@damage/@dice）は直前のセリフを残す', () => {
+  const taro: Character = {
+    id: 'taro',
+    name: '太郎',
+    portraits: {},
+    defaultExpression: 'default',
+    params: { hp: { kind: 'pair', current: 10, max: 10 } },
+    showInStatusBar: true,
+  };
+
+  it('@damage / @dice のカットにも直前のメッセージが乗り、次のセリフで更新される', () => {
+    const { commands } = parseScript(
+      ['太郎: いくぞ', '@damage 太郎 3', '@dice 2d6 8', '太郎: やった'].join('\n'),
+    );
+    const { cuts } = buildCuts(commands, [taro], mazeKingdomTemplate, {});
+    expect(cuts).toHaveLength(4);
+    expect(cuts[0].message).toMatchObject({ speaker: '太郎', text: 'いくぞ' });
+    // @damage カット: ポップは出るがメッセージは直前のまま（空にならない）
+    expect(cuts[1].damagePopup).not.toBeNull();
+    expect(cuts[1].message).toMatchObject({ speaker: '太郎', text: 'いくぞ' });
+    // @dice カットも同様に直前のセリフを保持
+    expect(cuts[2].dice).not.toBeNull();
+    expect(cuts[2].message).toMatchObject({ speaker: '太郎', text: 'いくぞ' });
+    // 次のセリフで更新される
+    expect(cuts[3].message).toMatchObject({ speaker: '太郎', text: 'やった' });
+  });
+
+  it('セリフより前の演出カットはメッセージ無し（残すべき直前のセリフがない）', () => {
+    const { commands } = parseScript(['@damage 太郎 3', '太郎: いくぞ'].join('\n'));
+    const { cuts } = buildCuts(commands, [taro], mazeKingdomTemplate, {});
+    expect(cuts[0].damagePopup).not.toBeNull();
+    expect(cuts[0].message).toBeNull();
+  });
+});
+
 describe('@text ブロック（テキスト画面）', () => {
   it('@end までの行を字下げ・空行込みで収集し、@text off で解除する', () => {
     const src = [
