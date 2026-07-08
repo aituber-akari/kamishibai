@@ -145,7 +145,7 @@ function CharacterCard({
         <span className="row-label">別名</span>
         <input
           value={(ch.aliases ?? []).join('、')}
-          placeholder="例: PL1、PLPL1（読点・カンマ区切り）"
+          placeholder="例: PL1、PL名（読点・カンマ区切り）"
           title="脚本中でこの名前を使っても同じキャラとして扱われます（PL名・変名など）。話者プレートには書いた名前が表示されます"
           onChange={(e) =>
             onUpdate({

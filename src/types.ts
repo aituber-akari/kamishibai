@@ -81,7 +81,7 @@ export interface Character {
   assetFolders?: string[];
   /**
    * 別名。脚本中でこの名前を使っても同じキャラとして解決される
-   * （例: PC国王の別名にPLPL1を登録し、ゲーム外パートは「PL1:」で書く）。
+   * （例: PCの本名の別名にPL名を登録し、ゲーム外パートは「PL名:」で書く）。
    * 話者プレートには脚本に書いた名前がそのまま表示される
    */
   aliases?: string[];
