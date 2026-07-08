@@ -108,6 +108,25 @@ export type ScriptCommand =
   | { type: 'dice'; name?: string; spec: string; result: string; line: number }
   | { type: 'map'; asset: string | null; line: number } // null = 非表示
   | { type: 'bf'; lanes: string[] | null; line: number } // 生成戦場マップ。null = 非表示
+  // 生成ダンジョンマップ（王国の土地も同書式）。cols/rows null = 非表示
+  | { type: 'dungeon'; title: string | null; cols: number | null; rows: number | null; line: number }
+  // 部屋の開示・更新。delta=true のカウンタは既存値への増減、false は設定
+  | {
+      type: 'room';
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      name?: string;
+      counters: { label: string; value: number; delta: boolean }[];
+      line: number;
+    }
+  | { type: 'link'; x1: number; y1: number; x2: number; y2: number; line: number } // 部屋間の通路
+  // 王国周辺図。cols/rows null = 非表示
+  | { type: 'kingdom'; title: string | null; cols: number | null; rows: number | null; line: number }
+  // 領土。lines は表示行（脚本では / 区切り）。null = 撤去
+  | { type: 'terr'; x: number; y: number; lines: string[] | null; side: TerritorySide; line: number }
+  | { type: 'dist'; x: number; y: number; value: number | null; line: number } // 道中マス数。null = 撤去
   | { type: 'lane'; index: number; label?: string; state?: Lane['state']; line: number }
   | { type: 'trap'; index: number; label: string | null; line: number } // null = 解除（元ラベルに戻す）
   | { type: 'chip'; name: string; x: number | null; y: number | null; image?: string; line: number } // null = 撤去
@@ -196,10 +215,62 @@ export interface Lane {
   originalLabel: string;
 }
 
+/** 王国周辺図の領土の所属。色と枠で塗り分ける（self=自国/ally=味方国/enemy=敵国/neutral=未購入等） */
+export type TerritorySide = 'self' | 'ally' | 'enemy' | 'neutral';
+
+/** 王国周辺図の1マス（領土） */
+export interface Territory {
+  x: number;
+  y: number;
+  /** 表示行（「自国領」「古い神殿」のような複数行） */
+  lines: string[];
+  side: TerritorySide;
+}
+
+/** 生成ダンジョンマップの開示済みの部屋。w/h > 1 でセル結合の大部屋 */
+export interface DungeonRoom {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  name?: string;
+  /** 敵・罠などの表示カウンタ（脚本の記載順を保持） */
+  counters: { label: string; value: number }[];
+}
+
+/** 部屋間の通路 */
+export interface DungeonLink {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
 /** 戦闘マップ／ダンジョンマップの表示状態 */
 export type MapState =
   | { kind: 'image'; asset: string; chips: ChipState[]; marks: MapMark[] }
-  | { kind: 'lanes'; lanes: Lane[]; rows: number; chips: ChipState[]; marks: MapMark[] };
+  | { kind: 'lanes'; lanes: Lane[]; rows: number; chips: ChipState[]; marks: MapMark[] }
+  | {
+      kind: 'dungeon';
+      title: string | null;
+      cols: number;
+      rows: number;
+      rooms: DungeonRoom[];
+      links: DungeonLink[];
+      chips: ChipState[];
+      marks: MapMark[];
+    }
+  | {
+      kind: 'kingdom';
+      title: string | null;
+      cols: number;
+      rows: number;
+      terrs: Territory[];
+      /** 出発地→攻略対象のマス数（イベント表を振る回数）の表示 */
+      dists: { x: number; y: number; value: number }[];
+      chips: ChipState[];
+      marks: MapMark[];
+    };
 
 /** BGMの再生状態。fadeInSeconds はこのトラックが始まるときのフェードイン */
 export interface BgmState {

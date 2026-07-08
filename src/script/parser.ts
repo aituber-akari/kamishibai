@@ -1,4 +1,4 @@
-import type { ParseError, ParseResult, ScriptCommand, StagePosition } from '../types';
+import type { ParseError, ParseResult, ScriptCommand, StagePosition, TerritorySide } from '../types';
 
 const POSITIONS: StagePosition[] = ['left', 'center', 'right'];
 
@@ -163,6 +163,90 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
       if (!args[0]) return { type: 'bf', lanes: [], line };
       if (args[0] === 'off') return { type: 'bf', lanes: null, line };
       return { type: 'bf', lanes: args, line };
+    case 'dungeon': {
+      // 「@dungeon [タイトル] 3x3」生成ダンジョンマップ（王国の土地も同書式）。「@dungeon off」で消去
+      if (args[0] === 'off') return { type: 'dungeon', title: null, cols: null, rows: null, line };
+      const size = args.length > 0 ? args[args.length - 1].match(/^(\d+)[xX×](\d+)$/) : null;
+      const cols = size ? Number(size[1]) : 0;
+      const rows = size ? Number(size[2]) : 0;
+      if (!size || cols < 1 || rows < 1)
+        return err('@dungeon は「@dungeon [タイトル] 3x3」または「@dungeon off」の形式です');
+      return { type: 'dungeon', title: args.slice(0, -1).join(' ') || null, cols, rows, line };
+    }
+    case 'room': {
+      // 「@room 列 行 [WxH] [名前] [敵2 罠0 …]」部屋の開示。
+      // 符号付き数値（敵-1）は既存部屋のカウンタ増減
+      const x = Number(args[0]);
+      const y = Number(args[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y))
+        return err('@room は「@room 列 行 [WxH] [名前] [敵2 罠0 …]」の形式です');
+      let w = 1;
+      let h = 1;
+      let name: string | undefined;
+      const counters: { label: string; value: number; delta: boolean }[] = [];
+      for (const a of args.slice(2)) {
+        const size = a.match(/^(\d+)[xX×](\d+)$/);
+        if (size) {
+          w = Number(size[1]);
+          h = Number(size[2]);
+          continue;
+        }
+        const counter = a.match(/^(\D+?)([+-]?\d+)$/);
+        if (counter) {
+          counters.push({
+            label: counter[1],
+            value: Number(counter[2]),
+            delta: /^[+-]/.test(counter[2]),
+          });
+          continue;
+        }
+        if (name !== undefined) return err(`@room: 解釈できない指定です: ${a}`);
+        name = a;
+      }
+      return { type: 'room', x, y, w, h, name, counters, line };
+    }
+    case 'link': {
+      // 「@link 列1 行1 列2 行2」部屋間の通路
+      const nums = args.map(Number);
+      if (nums.length < 4 || nums.some((n) => !Number.isFinite(n)))
+        return err('@link は「@link 列1 行1 列2 行2」の形式です');
+      return { type: 'link', x1: nums[0], y1: nums[1], x2: nums[2], y2: nums[3], line };
+    }
+    case 'kingdom': {
+      // 「@kingdom [タイトル] 6x6」王国周辺図。「@kingdom off」で消去
+      if (args[0] === 'off') return { type: 'kingdom', title: null, cols: null, rows: null, line };
+      const size = args.length > 0 ? args[args.length - 1].match(/^(\d+)[xX×](\d+)$/) : null;
+      const cols = size ? Number(size[1]) : 0;
+      const rows = size ? Number(size[2]) : 0;
+      if (!size || cols < 1 || rows < 1)
+        return err('@kingdom は「@kingdom [タイトル] 6x6」または「@kingdom off」の形式です');
+      return { type: 'kingdom', title: args.slice(0, -1).join(' ') || null, cols, rows, line };
+    }
+    case 'terr': {
+      // 「@terr 列 行 名前 [自国|味方|敵]」領土。名前は / で改行。「@terr 列 行 off」で撤去
+      const x = Number(args[0]);
+      const y = Number(args[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !args[2])
+        return err('@terr は「@terr 列 行 名前 [自国|味方|敵]」または「@terr 列 行 off」の形式です');
+      if (args[2] === 'off') return { type: 'terr', x, y, lines: null, side: 'neutral', line };
+      const SIDES: Record<string, TerritorySide> = { 自国: 'self', 味方: 'ally', 敵: 'enemy' };
+      const last = args[args.length - 1];
+      const side = SIDES[last] ?? 'neutral';
+      const nameArgs = side === 'neutral' ? args.slice(2) : args.slice(2, -1);
+      if (nameArgs.length === 0) return err('@terr には領土の名前が必要です');
+      return { type: 'terr', x, y, lines: nameArgs.join(' ').split(/[/／]/), side, line };
+    }
+    case 'dist': {
+      // 「@dist 列 行 3」道中マス数（イベント表を振る回数）。「@dist 列 行 off」で撤去
+      const x = Number(args[0]);
+      const y = Number(args[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !args[2])
+        return err('@dist は「@dist 列 行 マス数」または「@dist 列 行 off」の形式です');
+      if (args[2] === 'off') return { type: 'dist', x, y, value: null, line };
+      const value = Number(args[2]);
+      if (!Number.isFinite(value)) return err('@dist のマス数は数値で指定してください');
+      return { type: 'dist', x, y, value, line };
+    }
     case 'lane': {
       // 「@lane 2 danger」「@lane 2 罠原 danger」「@lane 2 罠原」— 戦場トラップの発動等
       const index = Number(args[0]);

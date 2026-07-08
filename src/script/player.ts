@@ -189,6 +189,106 @@ export function buildCuts(
         };
         break;
       }
+      case 'dungeon': {
+        if (cmd.cols === null || cmd.rows === null) {
+          state.map = null;
+          break;
+        }
+        // 全マス未探索の状態から開始。@room で開示していく
+        state.map = {
+          kind: 'dungeon',
+          title: cmd.title,
+          cols: cmd.cols,
+          rows: cmd.rows,
+          rooms: [],
+          links: [],
+          chips: [],
+          marks: [],
+        };
+        break;
+      }
+      case 'room': {
+        if (state.map?.kind !== 'dungeon') {
+          warnings.push({ line: cmd.line, message: '@room の前に @dungeon でマップを表示してください' });
+          break;
+        }
+        let room = state.map.rooms.find((r) => r.x === cmd.x && r.y === cmd.y);
+        if (!room) {
+          room = { x: cmd.x, y: cmd.y, w: cmd.w, h: cmd.h, name: cmd.name, counters: [] };
+          state.map.rooms.push(room);
+        } else {
+          // 再宣言はマージ: 名前・サイズは指定があるときだけ更新
+          if (cmd.name !== undefined) room.name = cmd.name;
+          if (cmd.w > 1 || cmd.h > 1) {
+            room.w = cmd.w;
+            room.h = cmd.h;
+          }
+        }
+        for (const c of cmd.counters) {
+          const existing = room.counters.find((k) => k.label === c.label);
+          const value = c.delta ? (existing?.value ?? 0) + c.value : c.value;
+          if (existing) existing.value = Math.max(0, value);
+          else room.counters.push({ label: c.label, value: Math.max(0, value) });
+        }
+        break;
+      }
+      case 'link': {
+        if (state.map?.kind !== 'dungeon') {
+          warnings.push({ line: cmd.line, message: '@link の前に @dungeon でマップを表示してください' });
+          break;
+        }
+        state.map.links.push({ x1: cmd.x1, y1: cmd.y1, x2: cmd.x2, y2: cmd.y2 });
+        break;
+      }
+      case 'kingdom': {
+        if (cmd.cols === null || cmd.rows === null) {
+          state.map = null;
+          break;
+        }
+        state.map = {
+          kind: 'kingdom',
+          title: cmd.title,
+          cols: cmd.cols,
+          rows: cmd.rows,
+          terrs: [],
+          dists: [],
+          chips: [],
+          marks: [],
+        };
+        break;
+      }
+      case 'terr': {
+        if (state.map?.kind !== 'kingdom') {
+          warnings.push({ line: cmd.line, message: '@terr の前に @kingdom で周辺図を表示してください' });
+          break;
+        }
+        // 再指定は表示順を保ったまま上書き
+        const existing = state.map.terrs.find((t) => t.x === cmd.x && t.y === cmd.y);
+        if (cmd.lines === null) {
+          state.map.terrs = state.map.terrs.filter((t) => t !== existing);
+        } else if (existing) {
+          existing.lines = cmd.lines;
+          existing.side = cmd.side;
+        } else {
+          state.map.terrs.push({ x: cmd.x, y: cmd.y, lines: cmd.lines, side: cmd.side });
+        }
+        break;
+      }
+      case 'dist': {
+        if (state.map?.kind !== 'kingdom') {
+          warnings.push({ line: cmd.line, message: '@dist の前に @kingdom で周辺図を表示してください' });
+          break;
+        }
+        const existing = state.map.dists.find((d) => d.x === cmd.x && d.y === cmd.y);
+        if (cmd.value === null) {
+          state.map.dists = state.map.dists.filter((d) => d !== existing);
+        } else if (existing) {
+          existing.value = cmd.value;
+        } else {
+          state.map.dists.push({ x: cmd.x, y: cmd.y, value: cmd.value });
+        }
+        break;
+      }
       case 'trap': {
         if (state.map?.kind !== 'lanes') {
           warnings.push({ line: cmd.line, message: '@trap は @bf で生成した戦場マップに対して使います' });

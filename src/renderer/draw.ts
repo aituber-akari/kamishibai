@@ -271,7 +271,13 @@ function drawMap(
   options: DrawOptions,
 ): void {
   const geo =
-    map.kind === 'image' ? drawImageMap(ctx, map, images) : drawLanesMap(ctx, map, template);
+    map.kind === 'image'
+      ? drawImageMap(ctx, map, images)
+      : map.kind === 'lanes'
+        ? drawLanesMap(ctx, map, template)
+        : map.kind === 'dungeon'
+          ? drawDungeonMap(ctx, map)
+          : drawKingdomMap(ctx, map);
   if (!geo) return;
   drawChips(ctx, cut, map, images, characters, template, geo, options);
   drawMarks(ctx, map, geo);
@@ -298,6 +304,225 @@ function drawImageMap(
 
   // 画像マップの座標は% (0-100)
   return { toX: (px) => x + (px / 100) * w, toY: (py) => y + (py / 100) * h, unit: h * 0.1 };
+}
+
+/** 生成マップ共通のグリッドパネル（薄灰パネル＋MAPヘッダ＋座標系）を描いて幾何を返す */
+function drawGridPanel(
+  ctx: CanvasRenderingContext2D,
+  title: string | null,
+  cols: number,
+  rows: number,
+): { gridX: number; gridY: number; cell: number } {
+  const headerH = title ? 34 : 14;
+  const pad = 12;
+  const cell = Math.min((MAP_AREA.w * 0.72 - pad * 2) / cols, (MAP_AREA.h - headerH - pad * 2) / rows);
+  const panelW = cols * cell + pad * 2;
+  const panelH = rows * cell + headerH + pad * 2;
+  // スクショ準拠で右寄せ（左は立ち絵のためのスペース）
+  const px = MAP_AREA.x + MAP_AREA.w - panelW;
+  const py = MAP_AREA.y;
+  const gridX = px + pad;
+  const gridY = py + headerH + pad;
+
+  ctx.shadowColor = 'rgba(0,0,0,0.45)';
+  ctx.shadowBlur = 12;
+  ctx.fillStyle = 'rgba(198, 200, 206, 0.94)';
+  ctx.beginPath();
+  ctx.roundRect(px, py, panelW, panelH, 10);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  if (title) {
+    ctx.fillStyle = '#16213e';
+    ctx.font = `bold ${Math.min(20, headerH * 0.6)}px ${FONT}`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`MAP：${title}`, gridX, py + headerH / 2 + 6, panelW - pad * 2);
+  }
+  return { gridX, gridY, cell };
+}
+
+/** グリッドの列・行座標（整数=マス中央、小数=マス内位置）→キャンバス座標の変換 */
+function gridGeometry(gridX: number, gridY: number, cell: number, cols: number, rows: number): MapGeometry {
+  const to = (base: number, max: number) => (v: number) => {
+    const c = Math.max(1, Math.min(max, Math.floor(v)));
+    const frac = v - Math.floor(v);
+    return base + (frac === 0 ? c - 0.5 : c - 1 + frac) * cell;
+  };
+  // チップはマスの内容（部屋名・領土名）を隠さないよう控えめなサイズにする
+  return { toX: to(gridX, cols), toY: to(gridY, rows), unit: cell * 0.46 };
+}
+
+/**
+ * 素材不要の生成ダンジョンマップ（王国の土地も同書式）。
+ * 未探索マスは白箱、@room で開示された部屋は黒枠＋名前＋カウンタで描く。
+ * 通路（@link）は部屋の中心を結ぶ直線／L字線で、部屋の下に敷く
+ */
+function drawDungeonMap(
+  ctx: CanvasRenderingContext2D,
+  map: Extract<MapState, { kind: 'dungeon' }>,
+): MapGeometry | null {
+  if (map.cols < 1 || map.rows < 1) return null;
+  ctx.save();
+  const { gridX, gridY, cell } = drawGridPanel(ctx, map.title, map.cols, map.rows);
+
+  const cellRect = (cx: number, cy: number, w = 1, h = 1) => ({
+    x: gridX + (cx - 1) * cell + 2,
+    y: gridY + (cy - 1) * cell + 2,
+    w: w * cell - 4,
+    h: h * cell - 4,
+  });
+  const covered = (cx: number, cy: number) =>
+    map.rooms.some((r) => cx >= r.x && cx < r.x + r.w && cy >= r.y && cy < r.y + r.h);
+
+  // 未探索マス（部屋に覆われていないマス全部）
+  ctx.lineWidth = 1;
+  for (let cy = 1; cy <= map.rows; cy++) {
+    for (let cx = 1; cx <= map.cols; cx++) {
+      if (covered(cx, cy)) continue;
+      const r = cellRect(cx, cy);
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx.strokeStyle = 'rgba(60,60,70,0.3)';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+    }
+  }
+
+  // 通路（部屋の下に敷く）。同列/同行は直線、それ以外はL字
+  const centerOf = (cx: number, cy: number) => {
+    const room = map.rooms.find((r) => cx >= r.x && cx < r.x + r.w && cy >= r.y && cy < r.y + r.h);
+    const rx = room ? room.x + room.w / 2 - 0.5 : cx;
+    const ry = room ? room.y + room.h / 2 - 0.5 : cy;
+    return { x: gridX + (rx - 0.5) * cell, y: gridY + (ry - 0.5) * cell };
+  };
+  ctx.strokeStyle = 'rgba(25,25,35,0.75)';
+  ctx.lineWidth = Math.max(2, cell * 0.045);
+  for (const link of map.links) {
+    const a = centerOf(link.x1, link.y1);
+    const b = centerOf(link.x2, link.y2);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    if (link.x1 !== link.x2 && link.y1 !== link.y2) ctx.lineTo(b.x, a.y); // L字の角
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+
+  // 開示済みの部屋
+  for (const room of map.rooms) {
+    const r = cellRect(room.x, room.y, room.w, room.h);
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = 'rgba(20,20,30,0.85)';
+    ctx.lineWidth = 2;
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeRect(r.x, r.y, r.w, r.h);
+
+    // 名前＋カウンタを縦に中央寄せ。マスに収まるようフォントは自動縮小
+    const lines: { text: string; bold: boolean }[] = [];
+    if (room.name) lines.push({ text: room.name, bold: true });
+    for (const c of room.counters) lines.push({ text: `${c.label}：${c.value}`, bold: false });
+    if (lines.length === 0) continue;
+    const fontSize = Math.max(9, Math.min(16, (r.h - 8) / lines.length - 4, r.w * 0.22));
+    const lineH = fontSize + 4;
+    const startY = r.y + r.h / 2 - (lineH * (lines.length - 1)) / 2;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    lines.forEach((ln, i) => {
+      ctx.font = `${ln.bold ? 'bold ' : ''}${fontSize}px ${FONT}`;
+      ctx.fillStyle = ln.bold ? '#16213e' : '#333';
+      ctx.fillText(ln.text, r.x + r.w / 2, startY + i * lineH, r.w - 6);
+    });
+  }
+
+  ctx.restore();
+  return gridGeometry(gridX, gridY, cell, map.cols, map.rows);
+}
+
+/** 領土の所属→CUD推奨配色（色覚多様性対応）。色に加えて枠線でも区別する */
+const TERRITORY_STYLE: Record<
+  'self' | 'ally' | 'enemy' | 'neutral',
+  { color: string; border: string; dash: number[] }
+> = {
+  self: { color: '#03af7a', border: 'rgba(3,175,122,0.8)', dash: [] },
+  ally: { color: '#005aff', border: 'rgba(0,90,255,0.7)', dash: [] },
+  enemy: { color: '#ff4b00', border: 'rgba(255,75,0,0.8)', dash: [5, 3] },
+  neutral: { color: '#222', border: 'rgba(60,60,70,0.3)', dash: [] },
+};
+
+/**
+ * 王国周辺図。全マスを白マスで敷き、@terr の領土を所属色（CUD配色）で、
+ * @dist の道中マス数を朱色の数字で描く（領土マスには隅に重ね書き）
+ */
+function drawKingdomMap(
+  ctx: CanvasRenderingContext2D,
+  map: Extract<MapState, { kind: 'kingdom' }>,
+): MapGeometry | null {
+  if (map.cols < 1 || map.rows < 1) return null;
+  ctx.save();
+  const { gridX, gridY, cell } = drawGridPanel(ctx, map.title, map.cols, map.rows);
+
+  const cellRect = (cx: number, cy: number) => ({
+    x: gridX + (cx - 1) * cell + 2,
+    y: gridY + (cy - 1) * cell + 2,
+    w: cell - 4,
+    h: cell - 4,
+  });
+
+  // 全マスの下地
+  ctx.lineWidth = 1;
+  for (let cy = 1; cy <= map.rows; cy++) {
+    for (let cx = 1; cx <= map.cols; cx++) {
+      const r = cellRect(cx, cy);
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx.strokeStyle = 'rgba(60,60,70,0.3)';
+      ctx.setLineDash([]);
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+    }
+  }
+
+  // 領土（所属色の文字＋枠。色だけに頼らず敵国は破線枠で区別）
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const terr of map.terrs) {
+    const r = cellRect(terr.x, terr.y);
+    const style = TERRITORY_STYLE[terr.side];
+    if (terr.side !== 'neutral') {
+      ctx.strokeStyle = style.border;
+      ctx.lineWidth = 2;
+      ctx.setLineDash(style.dash);
+      ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+      ctx.setLineDash([]);
+    }
+    const fontSize = Math.max(9, Math.min(14, (r.h - 6) / terr.lines.length - 3, r.w * 0.19));
+    const lineH = fontSize + 3;
+    const startY = r.y + r.h / 2 - (lineH * (terr.lines.length - 1)) / 2;
+    ctx.font = `bold ${fontSize}px ${FONT}`;
+    ctx.fillStyle = style.color;
+    terr.lines.forEach((ln, i) => {
+      ctx.fillText(ln, r.x + r.w / 2, startY + i * lineH, r.w - 6);
+    });
+  }
+
+  // 道中マス数（イベント表を振る回数）。空きマスは中央に大きく、領土マスは右下隅に
+  for (const d of map.dists) {
+    const r = cellRect(d.x, d.y);
+    const occupied = map.terrs.some((t) => t.x === d.x && t.y === d.y);
+    ctx.fillStyle = '#ff4b00';
+    if (occupied) {
+      ctx.font = `bold ${Math.max(11, cell * 0.3)}px ${FONT}`;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(String(d.value), r.x + r.w - 3, r.y + r.h - 1);
+    } else {
+      ctx.font = `bold ${Math.max(14, cell * 0.42)}px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(d.value), r.x + r.w / 2, r.y + r.h / 2);
+    }
+  }
+
+  ctx.restore();
+  return gridGeometry(gridX, gridY, cell, map.cols, map.rows);
 }
 
 /** ラベルから敵味方を推定する。判定キーワードはゲームテンプレート定義に従う */
