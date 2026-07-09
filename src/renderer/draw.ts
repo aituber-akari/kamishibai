@@ -250,7 +250,9 @@ function drawPortraits(
 // ============ 戦闘マップ／ダンジョンマップ ============
 
 // 表示領域: ステータスバーの下〜メッセージウィンドウの上、左は立ち絵ぶんを空ける
-const MAP_AREA = { x: 320, y: BAR_H + 16, w: CANVAS_W - 320 - 24, h: CANVAS_H - BAR_H - 16 - 230 };
+// メッセージウィンドウは高さ170+下マージン24=194を下部に確保する。
+// マップ領域は BAR_H(132)+16 の下端から、メッセージ上端(526)まで使える
+const MAP_AREA = { x: 320, y: BAR_H + 16, w: CANVAS_W - 320 - 24, h: CANVAS_H - BAR_H - 16 - 200 };
 
 /** チップ/マーカーの論理座標 → キャンバス座標と基準サイズへの変換 */
 interface MapGeometry {
@@ -316,7 +318,8 @@ function drawGridPanel(
 ): { gridX: number; gridY: number; cell: number } {
   const headerH = title ? 34 : 14;
   const pad = 12;
-  const cell = Math.min((MAP_AREA.w * 0.72 - pad * 2) / cols, (MAP_AREA.h - headerH - pad * 2) / rows);
+  // 立ち絵と重なりすぎない程度に右側を使う（横は最大 85%、高さは余った下部まで）
+  const cell = Math.min((MAP_AREA.w * 0.85 - pad * 2) / cols, (MAP_AREA.h - headerH - pad * 2) / rows);
   const panelW = cols * cell + pad * 2;
   const panelH = rows * cell + headerH + pad * 2;
   // スクショ準拠で右寄せ（左は立ち絵のためのスペース）
@@ -455,29 +458,30 @@ function drawDungeonMap(
       const touchH = (ax + aw === bx || bx + bw === ax) && ay < by + bh && by < ay + ah;
       const touchV = (ay + ah === by || by + bh === ay) && ax < bx + bw && bx < ax + aw;
       if (touchH || touchV) {
-        // 隣接部屋の通路: 濃いグレーの帯で部屋どうしを橋渡しする。
-        // 白い部屋と白い部屋の間なので、パネル背景より暗い色でないと見えない
+        // 隣接部屋の通路: 濃いグレーの短いライン。両端を部屋の内側に食い込ませて
+        // 「壁を貫通して繋がっている」ことを見せる（帯は文字と重なるとうるさい）
         const overlapX1 = Math.max(ax, bx);
         const overlapX2 = Math.min(ax + aw, bx + bw);
         const overlapY1 = Math.max(ay, by);
         const overlapY2 = Math.min(ay + ah, by + bh);
-        ctx.fillStyle = 'rgba(45, 48, 58, 0.9)';
-        const thickness = Math.max(10, cell * 0.22);
+        ctx.strokeStyle = 'rgba(30, 32, 42, 0.95)';
+        ctx.lineWidth = Math.max(3, cell * 0.06);
+        const bite = Math.max(6, cell * 0.18); // 部屋の内側に食い込む長さ
+        ctx.beginPath();
         if (touchH) {
           const boundary = ax + aw === bx ? ax + aw : bx + bw;
           const bx0 = gridX + (boundary - 1) * cell;
-          const gapY = gridY + (overlapY1 - 1) * cell;
-          const gapH = (overlapY2 - overlapY1) * cell;
-          // 帯は境界を跨ぎ、両側の部屋の内側に少し食い込む。上下は共有辺の中央 60%
-          ctx.fillRect(bx0 - thickness / 2, gapY + gapH * 0.2, thickness, gapH * 0.6);
+          const gapY = gridY + (overlapY1 - 1) * cell + (overlapY2 - overlapY1) * cell / 2;
+          ctx.moveTo(bx0 - bite, gapY);
+          ctx.lineTo(bx0 + bite, gapY);
         } else {
           const boundary = ay + ah === by ? ay + ah : by + bh;
           const by0 = gridY + (boundary - 1) * cell;
-          const gapX = gridX + (overlapX1 - 1) * cell;
-          const gapW = (overlapX2 - overlapX1) * cell;
-          ctx.fillRect(gapX + gapW * 0.2, by0 - thickness / 2, gapW * 0.6, thickness);
+          const gapX = gridX + (overlapX1 - 1) * cell + (overlapX2 - overlapX1) * cell / 2;
+          ctx.moveTo(gapX, by0 - bite);
+          ctx.lineTo(gapX, by0 + bite);
         }
-        ctx.fillStyle = 'rgba(25,25,35,0.85)';
+        ctx.stroke();
         continue;
       }
     }
@@ -528,10 +532,11 @@ function drawDungeonMap(
       ctx.stroke();
     }
 
-    // 名前＋カウンタを縦に中央寄せ。マスに収まるようフォントは自動縮小
-    const lines: { text: string; bold: boolean }[] = [];
-    if (room.name) lines.push({ text: room.name, bold: true });
-    for (const c of room.counters) lines.push({ text: `${c.label}：${c.value}`, bold: false });
+    // 名前＋カウンタを縦に中央寄せ。マスに収まるようフォントは自動縮小。
+    // 部屋内は視認性優先で全部 bold（名前・カウンタとも）
+    const lines: { text: string; emphasize: boolean }[] = [];
+    if (room.name) lines.push({ text: room.name, emphasize: true });
+    for (const c of room.counters) lines.push({ text: `${c.label}：${c.value}`, emphasize: false });
     if (lines.length === 0) continue;
     const fontSize = Math.max(9, Math.min(16, (r.h - 8) / lines.length - 4, r.w * 0.22));
     const lineH = fontSize + 4;
@@ -539,8 +544,8 @@ function drawDungeonMap(
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     lines.forEach((ln, i) => {
-      ctx.font = `${ln.bold ? 'bold ' : ''}${fontSize}px ${FONT}`;
-      ctx.fillStyle = ln.bold ? '#16213e' : '#333';
+      ctx.font = `bold ${fontSize}px ${FONT}`;
+      ctx.fillStyle = ln.emphasize ? '#16213e' : '#333';
       ctx.fillText(ln.text, r.x + r.w / 2, startY + i * lineH, r.w - 6);
     });
   }
