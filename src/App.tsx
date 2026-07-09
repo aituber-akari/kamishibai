@@ -10,6 +10,7 @@ import { PreviewPane } from './components/PreviewPane';
 import { AssetPanel } from './components/AssetPanel';
 import { AssetSelect } from './components/AssetSelect';
 import { CharacterPanel } from './components/CharacterPanel';
+import { ScriptEditor, type ScriptEditorHandle } from './components/ScriptEditor';
 import { SAMPLE_SCRIPT } from './sampleScript';
 
 const STORAGE_KEY = 'kamishibai-project-v1';
@@ -230,6 +231,27 @@ export default function App() {
     [errors, warnings],
   );
 
+  // エディタ支援: 補完候補・エラー行ジャンプ・カーソル行のカットをプレビューに同期
+  const editorRef = useRef<ScriptEditorHandle>(null);
+  const characterNames = useMemo(
+    () => characters.flatMap((c) => [c.name, ...(c.aliases ?? [])]),
+    [characters],
+  );
+  const assetNames = useMemo(() => [...assets.keys()], [assets]);
+  const [cursorSync, setCursorSync] = useState<{ index: number; nonce: number } | null>(null);
+  const cutsRef = useRef(cuts);
+  cutsRef.current = cuts;
+  const handleCursorLine = (line: number) => {
+    // カーソル行以前で最後に始まったカットを探す（cut.line は生成元の脚本行）
+    const current = cutsRef.current;
+    let index = -1;
+    for (const cut of current) {
+      if (cut.line <= line) index = cut.index;
+      else break;
+    }
+    if (index >= 0) setCursorSync((prev) => ({ index, nonce: (prev?.nonce ?? 0) + 1 }));
+  };
+
   return (
     <div className="app">
       <header className="app-header">
@@ -291,16 +313,24 @@ export default function App() {
         <div className="left-column">
           <section className="panel script-panel">
             <h2>脚本</h2>
-            <textarea
-              className="script-editor"
+            <ScriptEditor
+              ref={editorRef}
               value={script}
-              onChange={(e) => setScript(e.target.value)}
-              spellCheck={false}
+              onChange={setScript}
+              problems={problems}
+              characterNames={characterNames}
+              assetNames={assetNames}
+              onCursorLine={handleCursorLine}
             />
             {problems.length > 0 && (
               <ul className="error-list">
                 {problems.map((p, i) => (
-                  <li key={i} className={p.level === 'warning' ? 'problem-warning' : undefined}>
+                  <li
+                    key={i}
+                    className={p.level === 'warning' ? 'problem-warning' : undefined}
+                    onClick={() => editorRef.current?.jumpToLine(p.line)}
+                    title="クリックでその行へジャンプ"
+                  >
                     {p.line}行目: {p.message}
                   </li>
                 ))}
@@ -318,6 +348,7 @@ export default function App() {
             defaultDiceFolder={defaultDiceFolder}
             diceAnimation={diceAnimation}
             fontFamily={fontFamily}
+            cursorSync={cursorSync}
           />
           <div className="bottom-panels">
             <CharacterPanel

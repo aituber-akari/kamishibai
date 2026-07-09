@@ -104,13 +104,25 @@
   flex: 1;
 }
 
-.script-editor {
+.script-editor-cm {
   flex: 1;
-  resize: none;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.8;
-  white-space: pre;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.script-editor-cm .cm-editor {
+  height: 100%;
+}
+
+.error-list li {
+  cursor: pointer;
+}
+
+.error-list li:hover {
+  text-decoration: underline;
 }
 
 .error-list {

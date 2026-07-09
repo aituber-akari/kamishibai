@@ -24,6 +24,8 @@ interface Props {
   diceAnimation: boolean;
   /** 動画キャンバスのフォント（未指定は同梱UDフォント） */
   fontFamily?: string;
+  /** エディタのカーソル行に対応するカットへの同期指示（nonce が変わるたび反映） */
+  cursorSync?: { index: number; nonce: number } | null;
 }
 
 /** Audio要素の音量を段階的に変化させる（プレビュー用の簡易フェード）。戻り値は中断関数 */
@@ -57,6 +59,7 @@ export function PreviewPane({
   defaultDiceFolder,
   diceAnimation,
   fontFamily,
+  cursorSync,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [index, setIndex] = useState(0);
@@ -76,6 +79,13 @@ export function PreviewPane({
   useEffect(() => {
     setIndex((i) => Math.min(i, Math.max(0, cuts.length - 1)));
   }, [cuts.length]);
+
+  // エディタのカーソル行に対応するカットへ同期（編集中の行の絵がすぐ見える）
+  useEffect(() => {
+    if (cursorSync) setIndex(Math.max(0, cursorSync.index));
+    // nonce で「同じカットでも再同期」を拾う
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cursorSync?.nonce]);
 
   // 描画。ダイスカットはカット表示開始からの経過時間で連番アニメを回す
   useEffect(() => {
