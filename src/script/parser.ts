@@ -13,17 +13,85 @@ const POSITIONS: StagePosition[] = ['left', 'center', 'right'];
  *   名前: セリフ / 名前(表情): セリフ
  *   # コメント
  */
+/** マクロ（@call）のネスト展開の上限。相互再帰の暴走防止 */
+const MAX_MACRO_DEPTH = 9;
+
 export function parseScript(source: string): ParseResult {
   const commands: ScriptCommand[] = [];
   const errors: ParseError[] = [];
 
-  const lines = source.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    const lineNo = i + 1;
-    let raw = lines[i].trim();
+  // 行の作業リスト。@call の展開はこのリストへの差し込みで行う。
+  // line は元脚本の行番号（マクロ展開行は @call を書いた行）、depth は展開の深さ
+  const macros = new Map<string, string[]>();
+  const work: { raw: string; line: number; depth: number }[] = source
+    .split(/\r?\n/)
+    .map((raw, i) => ({ raw, line: i + 1, depth: 0 }));
+
+  for (let i = 0; i < work.length; i++) {
+    const { line: lineNo, depth } = work[i];
+    let raw = work[i].raw.trim();
     // 行頭コメント（全角＃も許容）。セリフ中の「#」を壊さないよう、
     // 行中コメントはコマンド行（@）でのみ許可する
     if (raw === '' || raw.startsWith('#') || raw.startsWith('＃')) continue;
+
+    // @def 〜 @end: マクロ定義。本文は展開せずそのまま保存する（呼び出し時に展開）。
+    // 本文中の @text 〜 @end はネストとして数え、マクロの @end と混同しない
+    const defStart = raw.match(/^[@＠]def(?:\s+(\S+))?\s*$/);
+    if (defStart) {
+      const body: string[] = [];
+      let textDepth = 0;
+      let closed = false;
+      while (i + 1 < work.length) {
+        i++;
+        const t = work[i].raw.trim();
+        if (/^[@＠]text(?:\s|$)/.test(t) && !/^[@＠]text\s+off\s*$/.test(t)) textDepth++;
+        if (/^[@＠]end\s*$/.test(t)) {
+          if (textDepth > 0) {
+            textDepth--;
+            body.push(work[i].raw);
+            continue;
+          }
+          closed = true;
+          break;
+        }
+        body.push(work[i].raw);
+      }
+      if (!defStart[1]) {
+        errors.push({ line: lineNo, message: '@def は「@def マクロ名 〜 @end」の形式です' });
+      } else if (!closed) {
+        errors.push({ line: lineNo, message: `@def ${defStart[1]} に対応する @end がありません` });
+      } else {
+        macros.set(defStart[1], body); // 再定義は上書き
+      }
+      continue;
+    }
+
+    // @call: マクロ本文（$1〜$9 を引数で置換）をこの位置に差し込む
+    const callStart = raw.match(/^[@＠]call(?:\s+(\S+))?\s*(.*)$/);
+    if (callStart) {
+      const name = callStart[1];
+      if (!name) {
+        errors.push({ line: lineNo, message: '@call は「@call マクロ名 [引数…]」の形式です' });
+        continue;
+      }
+      const body = macros.get(name);
+      if (!body) {
+        errors.push({ line: lineNo, message: `未定義のマクロです: ${name}（先に @def ${name} 〜 @end で定義してください）` });
+        continue;
+      }
+      if (depth >= MAX_MACRO_DEPTH) {
+        errors.push({ line: lineNo, message: `マクロの展開が深すぎます（再帰していませんか？）: ${name}` });
+        continue;
+      }
+      const args = callStart[2].split(/\s+/).filter(Boolean);
+      const expanded = body.map((b) => ({
+        raw: b.replace(/[$＄]([1-9])/g, (_, d: string) => args[Number(d) - 1] ?? ''),
+        line: lineNo,
+        depth: depth + 1,
+      }));
+      work.splice(i + 1, 0, ...expanded);
+      continue;
+    }
 
     // @text ブロック: @end までの行を字下げ・空行込みでそのまま収集する
     const textStart = raw.match(/^[@＠]text(?:\s+(.*))?$/);
@@ -31,13 +99,13 @@ export function parseScript(source: string): ParseResult {
       const bgColor = parseTextBg(textStart[1]?.trim(), lineNo, errors);
       const body: string[] = [];
       let closed = false;
-      while (i + 1 < lines.length) {
+      while (i + 1 < work.length) {
         i++;
-        if (/^[@＠]end\s*$/.test(lines[i].trim())) {
+        if (/^[@＠]end\s*$/.test(work[i].raw.trim())) {
           closed = true;
           break;
         }
-        body.push(lines[i].replace(/\s+$/, ''));
+        body.push(work[i].raw.replace(/\s+$/, ''));
       }
       if (!closed) {
         errors.push({ line: lineNo, message: '@text に対応する @end がありません' });
