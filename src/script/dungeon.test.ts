@@ -85,12 +85,24 @@ describe('@link のパース', () => {
   it('2部屋の座標で通路になる', () => {
     const { commands, errors } = parseScript('@link 2 1 3 1');
     expect(errors).toEqual([]);
-    expect(commands[0]).toMatchObject({ type: 'link', x1: 2, y1: 1, x2: 3, y2: 1 });
+    expect(commands[0]).toMatchObject({ type: 'link', x1: 2, y1: 1, x2: 3, y2: 1, entry: null });
   });
 
-  it('座標が4つ揃わなければエラー', () => {
-    expect(parseScript('@link 2 1 3').errors).toHaveLength(1);
+  it('@link 列 行 方向 で外部からの入口になる', () => {
+    const { commands, errors } = parseScript('@link 2 1 上');
+    expect(errors).toEqual([]);
+    expect(commands[0]).toMatchObject({ type: 'link', x1: 2, y1: 1, x2: null, y2: null, entry: 'up' });
+  });
+
+  it('方向は 上下左右 と up/down/left/right のどちらでも書ける', () => {
+    expect(parseScript('@link 2 3 下').commands[0]).toMatchObject({ entry: 'down' });
+    expect(parseScript('@link 2 3 left').commands[0]).toMatchObject({ entry: 'left' });
+  });
+
+  it('座標や方向が不正ならエラー', () => {
+    expect(parseScript('@link 2 1 3').errors).toHaveLength(1); // 3引数だが方向でない
     expect(parseScript('@link').errors).toHaveLength(1);
+    expect(parseScript('@link 2 1 ほげ').errors).toHaveLength(1);
   });
 });
 
@@ -169,7 +181,9 @@ describe('buildCuts: ダンジョンマップの状態展開', () => {
     );
     expect(warnings).toEqual([]);
     const m = cuts[0].map;
-    expect(m?.kind === 'dungeon' && m.links).toEqual([{ x1: 1, y1: 1, x2: 2, y2: 1 }]);
+    expect(m?.kind === 'dungeon' && m.links).toEqual([
+      { x1: 1, y1: 1, x2: 2, y2: 1, entry: null },
+    ]);
     expect(cuts[1].map).toBeNull();
   });
 

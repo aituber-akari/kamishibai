@@ -121,7 +121,16 @@ export type ScriptCommand =
       counters: { label: string; value: number; delta: boolean }[];
       line: number;
     }
-  | { type: 'link'; x1: number; y1: number; x2: number; y2: number; line: number } // 部屋間の通路
+  // 部屋間の通路。entry != null のとき外部入口（x2/y2 は使わない）
+  | {
+      type: 'link';
+      x1: number;
+      y1: number;
+      x2: number | null;
+      y2: number | null;
+      entry: 'up' | 'down' | 'left' | 'right' | null;
+      line: number;
+    }
   // 王国周辺図。cols/rows null = 非表示
   | { type: 'kingdom'; title: string | null; cols: number | null; rows: number | null; line: number }
   // 領土。lines は表示行（脚本では / 区切り）。null = 撤去
@@ -238,12 +247,16 @@ export interface DungeonRoom {
   counters: { label: string; value: number }[];
 }
 
-/** 部屋間の通路 */
+/**
+ * 部屋間の通路（entry=null）または外部からの入口（entry != null で x2/y2 null）。
+ * 外部入口は方向が示す辺の外側から部屋へ向かう矢印として描かれる
+ */
 export interface DungeonLink {
   x1: number;
   y1: number;
-  x2: number;
-  y2: number;
+  x2: number | null;
+  y2: number | null;
+  entry: 'up' | 'down' | 'left' | 'right' | null;
 }
 
 /** 戦闘マップ／ダンジョンマップの表示状態 */

@@ -3,6 +3,7 @@ import type {
   Cut,
   DamagePopup,
   DiceEffect,
+  DungeonRoom,
   GameTemplate,
   MapState,
   ParamValue,
@@ -388,23 +389,118 @@ function drawDungeonMap(
     }
   }
 
-  // 通路（部屋の下に敷く）。同列/同行は直線、それ以外はL字
+  // 通路。以下の3種を描き分ける（すべて部屋の下に敷く）
+  //  A. 外部入口（entry != null）: 外側から部屋の該当辺へ矢印
+  //  B. 隣接する部屋の間: セル間の 4px 隙間を白で塗り、部屋同士を繋いで見せる
+  //  C. 離れた部屋: 中心を直線／L字で結ぶ
+  const roomAt = (cx: number, cy: number) =>
+    map.rooms.find((r) => cx >= r.x && cx < r.x + r.w && cy >= r.y && cy < r.y + r.h);
   const centerOf = (cx: number, cy: number) => {
-    const room = map.rooms.find((r) => cx >= r.x && cx < r.x + r.w && cy >= r.y && cy < r.y + r.h);
+    const room = roomAt(cx, cy);
     const rx = room ? room.x + room.w / 2 - 0.5 : cx;
     const ry = room ? room.y + room.h / 2 - 0.5 : cy;
     return { x: gridX + (rx - 0.5) * cell, y: gridY + (ry - 0.5) * cell };
   };
-  ctx.strokeStyle = 'rgba(25,25,35,0.75)';
+  const arrow = (fx: number, fy: number, tx: number, ty: number) => {
+    ctx.beginPath();
+    ctx.moveTo(fx, fy);
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
+    const angle = Math.atan2(ty - fy, tx - fx);
+    const head = Math.max(6, cell * 0.14);
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(tx - head * Math.cos(angle - Math.PI / 6), ty - head * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(tx - head * Math.cos(angle + Math.PI / 6), ty - head * Math.sin(angle + Math.PI / 6));
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  ctx.strokeStyle = 'rgba(25,25,35,0.85)';
+  ctx.fillStyle = 'rgba(25,25,35,0.85)';
   ctx.lineWidth = Math.max(2, cell * 0.045);
   for (const link of map.links) {
+    if (link.entry) {
+      // 外部入口: 部屋の外壁の中央（entry の辺）へ、外から矢印を伸ばす
+      const room = roomAt(link.x1, link.y1);
+      const rx0 = room ? room.x : link.x1;
+      const ry0 = room ? room.y : link.y1;
+      const rw = room ? room.w : 1;
+      const rh = room ? room.h : 1;
+      const roomX = gridX + (rx0 - 1) * cell;
+      const roomY = gridY + (ry0 - 1) * cell;
+      const rW = rw * cell;
+      const rH = rh * cell;
+      const stub = cell * 0.32; // 外壁から外へ突き出す長さ
+      const toX = roomX + rW / 2;
+      const toY = roomY + rH / 2;
+      let fx = toX;
+      let fy = toY;
+      let tx = toX;
+      let ty = toY;
+      if (link.entry === 'up') { fy = roomY - stub; ty = roomY + 4; }
+      else if (link.entry === 'down') { fy = roomY + rH + stub; ty = roomY + rH - 4; }
+      else if (link.entry === 'left') { fx = roomX - stub; tx = roomX + 4; }
+      else { fx = roomX + rW + stub; tx = roomX + rW - 4; }
+      arrow(fx, fy, tx, ty);
+      continue;
+    }
+    if (link.x2 === null || link.y2 === null) continue;
+    // 隣接判定：2つの部屋の外接矩形が辺で接する（水平・垂直どちらか）
+    const ra = roomAt(link.x1, link.y1);
+    const rb = roomAt(link.x2, link.y2);
+    if (ra && rb) {
+      const ax = ra.x, ay = ra.y, aw = ra.w, ah = ra.h;
+      const bx = rb.x, by = rb.y, bw = rb.w, bh = rb.h;
+      const touchH = (ax + aw === bx || bx + bw === ax) && ay < by + bh && by < ay + ah;
+      const touchV = (ay + ah === by || by + bh === ay) && ax < bx + bw && bx < ax + aw;
+      if (touchH || touchV) {
+        // セル間の隙間（cellRect の ±2px マージン）を白で塗って一体化させる
+        const overlapX1 = Math.max(ax, bx);
+        const overlapX2 = Math.min(ax + aw, bx + bw);
+        const overlapY1 = Math.max(ay, by);
+        const overlapY2 = Math.min(ay + ah, by + bh);
+        ctx.fillStyle = 'rgba(255,255,255,1)';
+        if (touchH) {
+          const boundary = ax + aw === bx ? ax + aw : bx + bw;
+          const gapX = gridX + (boundary - 1) * cell - 3;
+          const gapY = gridY + (overlapY1 - 1) * cell + 2;
+          const gapH = (overlapY2 - overlapY1) * cell - 4;
+          // 幅は隙間 4px＋両側の枠線 2px ぶんを覆う
+          ctx.fillRect(gapX, gapY + gapH * 0.25, 6, gapH * 0.5);
+        } else {
+          const boundary = ay + ah === by ? ay + ah : by + bh;
+          const gapX = gridX + (overlapX1 - 1) * cell + 2;
+          const gapY = gridY + (boundary - 1) * cell - 3;
+          const gapW = (overlapX2 - overlapX1) * cell - 4;
+          ctx.fillRect(gapX + gapW * 0.25, gapY, gapW * 0.5, 6);
+        }
+        ctx.fillStyle = 'rgba(25,25,35,0.85)';
+        continue;
+      }
+    }
+    // 離れた部屋どうし: 中心を直線／L字で結ぶ
     const a = centerOf(link.x1, link.y1);
     const b = centerOf(link.x2, link.y2);
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
-    if (link.x1 !== link.x2 && link.y1 !== link.y2) ctx.lineTo(b.x, a.y); // L字の角
+    if (link.x1 !== link.x2 && link.y1 !== link.y2) ctx.lineTo(b.x, a.y);
     ctx.lineTo(b.x, b.y);
     ctx.stroke();
+  }
+
+  // どの辺に隣接通路があるかを事前計算（その辺は枠線を描かない）
+  const openSides = new Map<DungeonRoom, { top: boolean; bottom: boolean; left: boolean; right: boolean }>();
+  for (const room of map.rooms) openSides.set(room, { top: false, bottom: false, left: false, right: false });
+  for (const link of map.links) {
+    if (link.entry || link.x2 === null || link.y2 === null) continue;
+    const ra = roomAt(link.x1, link.y1);
+    const rb = roomAt(link.x2, link.y2);
+    if (!ra || !rb) continue;
+    if (ra.x + ra.w === rb.x) { openSides.get(ra)!.right = true; openSides.get(rb)!.left = true; }
+    else if (rb.x + rb.w === ra.x) { openSides.get(ra)!.left = true; openSides.get(rb)!.right = true; }
+    else if (ra.y + ra.h === rb.y) { openSides.get(ra)!.bottom = true; openSides.get(rb)!.top = true; }
+    else if (rb.y + rb.h === ra.y) { openSides.get(ra)!.top = true; openSides.get(rb)!.bottom = true; }
   }
 
   // 開示済みの部屋
@@ -414,7 +510,21 @@ function drawDungeonMap(
     ctx.strokeStyle = 'rgba(20,20,30,0.85)';
     ctx.lineWidth = 2;
     ctx.fillRect(r.x, r.y, r.w, r.h);
-    ctx.strokeRect(r.x, r.y, r.w, r.h);
+    // 通路のある辺は枠線を省いて、部屋どうしを繋いで見せる
+    const open = openSides.get(room)!;
+    const sides: [boolean, number, number, number, number][] = [
+      [!open.top, r.x, r.y, r.x + r.w, r.y],
+      [!open.right, r.x + r.w, r.y, r.x + r.w, r.y + r.h],
+      [!open.bottom, r.x, r.y + r.h, r.x + r.w, r.y + r.h],
+      [!open.left, r.x, r.y, r.x, r.y + r.h],
+    ];
+    for (const [draw, x1, y1, x2, y2] of sides) {
+      if (!draw) continue;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
 
     // 名前＋カウンタを縦に中央寄せ。マスに収まるようフォントは自動縮小
     const lines: { text: string; bold: boolean }[] = [];

@@ -237,7 +237,7 @@ export function buildCuts(
           warnings.push({ line: cmd.line, message: '@link の前に @dungeon でマップを表示してください' });
           break;
         }
-        state.map.links.push({ x1: cmd.x1, y1: cmd.y1, x2: cmd.x2, y2: cmd.y2 });
+        state.map.links.push({ x1: cmd.x1, y1: cmd.y1, x2: cmd.x2, y2: cmd.y2, entry: cmd.entry });
         break;
       }
       case 'kingdom': {

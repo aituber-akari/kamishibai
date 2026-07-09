@@ -206,11 +206,23 @@ function parseCommand(raw: string, line: number, errors: ParseError[]): ScriptCo
       return { type: 'room', x, y, w, h, name, counters, line };
     }
     case 'link': {
-      // 「@link 列1 行1 列2 行2」部屋間の通路
-      const nums = args.map(Number);
-      if (nums.length < 4 || nums.some((n) => !Number.isFinite(n)))
-        return err('@link は「@link 列1 行1 列2 行2」の形式です');
-      return { type: 'link', x1: nums[0], y1: nums[1], x2: nums[2], y2: nums[3], line };
+      // 「@link 列1 行1 列2 行2」部屋間の通路。または「@link 列 行 方向」で外部入口。
+      // 方向は 上下左右 と up/down/left/right のどちらでも書ける
+      const x1 = Number(args[0]);
+      const y1 = Number(args[1]);
+      if (!Number.isFinite(x1) || !Number.isFinite(y1))
+        return err('@link は「@link 列1 行1 列2 行2」または「@link 列 行 方向」の形式です');
+      const DIRS: Record<string, 'up' | 'down' | 'left' | 'right'> = {
+        上: 'up', 下: 'down', 左: 'left', 右: 'right',
+        up: 'up', down: 'down', left: 'left', right: 'right',
+      };
+      if (args.length === 3 && DIRS[args[2]])
+        return { type: 'link', x1, y1, x2: null, y2: null, entry: DIRS[args[2]], line };
+      const x2 = Number(args[2]);
+      const y2 = Number(args[3]);
+      if (args.length < 4 || !Number.isFinite(x2) || !Number.isFinite(y2))
+        return err('@link は「@link 列1 行1 列2 行2」または「@link 列 行 方向（上下左右）」の形式です');
+      return { type: 'link', x1, y1, x2, y2, entry: null, line };
     }
     case 'kingdom': {
       // 「@kingdom [タイトル] 6x6」王国周辺図。「@kingdom off」で消去
