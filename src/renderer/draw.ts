@@ -470,13 +470,35 @@ function drawDungeonMap(
     });
   }
 
-  // 通路（部屋の上に重ねる）。以下の3種を描き分ける
+  // 通路（部屋の上に重ねる）。
   //  A. 外部入口（entry != null）: 外側から部屋の該当辺へ矢印
-  //  B. 隣接する部屋の間: 境界を跨いで両側の内側に食い込む短いライン
-  //  C. 離れた部屋: 中心を直線／L字で結ぶ
+  //  B. 部屋間: 中心どうしを結ぶ直線（斜め可）を部屋の壁でクリップし、
+  //     壁から少しだけ内側に食い込ませる。中心まで引くと部屋名と被るため。
+  //     隣接部屋は同じ式の退化形（境界を跨ぐ短い線）になる
+  const rectOf = (room: DungeonRoom) => ({
+    x0: gridX + (room.x - 1) * cell + 2,
+    y0: gridY + (room.y - 1) * cell + 2,
+    x1: gridX + (room.x - 1 + room.w) * cell - 2,
+    y1: gridY + (room.y - 1 + room.h) * cell - 2,
+  });
+  // a を含む矩形から a→b 方向に出るときの線分パラメータ t（0=a, 1=b）
+  const exitT = (
+    a: { x: number; y: number },
+    b: { x: number; y: number },
+    rect: { x0: number; y0: number; x1: number; y1: number },
+  ) => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    let t = Infinity;
+    if (dx > 0) t = Math.min(t, (rect.x1 - a.x) / dx);
+    else if (dx < 0) t = Math.min(t, (rect.x0 - a.x) / dx);
+    if (dy > 0) t = Math.min(t, (rect.y1 - a.y) / dy);
+    else if (dy < 0) t = Math.min(t, (rect.y0 - a.y) / dy);
+    return Number.isFinite(t) ? Math.max(0, Math.min(1, t)) : 0;
+  };
   ctx.strokeStyle = 'rgba(25,25,35,0.9)';
   ctx.fillStyle = 'rgba(25,25,35,0.9)';
-  ctx.lineWidth = Math.max(2, cell * 0.045);
+  ctx.lineWidth = Math.max(3, cell * 0.06);
   for (const link of map.links) {
     if (link.entry) {
       // 外部入口: 部屋の外壁の中央（entry の辺）へ、外から矢印を伸ばす
@@ -506,46 +528,18 @@ function drawDungeonMap(
     if (link.x2 === null || link.y2 === null) continue;
     const ra = roomAt(link.x1, link.y1);
     const rb = roomAt(link.x2, link.y2);
-    if (ra && rb) {
-      const ax = ra.x, ay = ra.y, aw = ra.w, ah = ra.h;
-      const bx = rb.x, by = rb.y, bw = rb.w, bh = rb.h;
-      const touchH = (ax + aw === bx || bx + bw === ax) && ay < by + bh && by < ay + ah;
-      const touchV = (ay + ah === by || by + bh === ay) && ax < bx + bw && bx < ax + aw;
-      if (touchH || touchV) {
-        // 隣接部屋の通路: 境界を跨いで両側の内側に食い込む短いライン。
-        // 部屋の白塗りの上に重ねることで消えないようにする
-        const overlapX1 = Math.max(ax, bx);
-        const overlapX2 = Math.min(ax + aw, bx + bw);
-        const overlapY1 = Math.max(ay, by);
-        const overlapY2 = Math.min(ay + ah, by + bh);
-        ctx.strokeStyle = 'rgba(30, 32, 42, 0.95)';
-        ctx.lineWidth = Math.max(3, cell * 0.06);
-        const bite = Math.max(6, cell * 0.18);
-        ctx.beginPath();
-        if (touchH) {
-          const boundary = ax + aw === bx ? ax + aw : bx + bw;
-          const bx0 = gridX + (boundary - 1) * cell;
-          const gapY = gridY + (overlapY1 - 1) * cell + (overlapY2 - overlapY1) * cell / 2;
-          ctx.moveTo(bx0 - bite, gapY);
-          ctx.lineTo(bx0 + bite, gapY);
-        } else {
-          const boundary = ay + ah === by ? ay + ah : by + bh;
-          const by0 = gridY + (boundary - 1) * cell;
-          const gapX = gridX + (overlapX1 - 1) * cell + (overlapX2 - overlapX1) * cell / 2;
-          ctx.moveTo(gapX, by0 - bite);
-          ctx.lineTo(gapX, by0 + bite);
-        }
-        ctx.stroke();
-        continue;
-      }
-    }
-    // 離れた部屋どうし: 中心を直線／L字で結ぶ
     const a = centerOf(link.x1, link.y1);
     const b = centerOf(link.x2, link.y2);
+    const dist = Math.hypot(b.x - a.x, b.y - a.y);
+    if (dist < 1) continue;
+    const bite = Math.max(6, cell * 0.18) / dist; // 壁から内側への食い込み（t換算）
+    // 部屋がある端点は壁+食い込みで止める。部屋がない端点（未探索マス）は中心まで
+    const t1 = ra ? Math.max(0, exitT(a, b, rectOf(ra)) - bite) : 0;
+    const t2 = rb ? Math.min(1, 1 - (exitT(b, a, rectOf(rb)) - bite)) : 1;
+    if (t1 >= t2) continue; // 重なった部屋どうし等の退化ケース
     ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    if (link.x1 !== link.x2 && link.y1 !== link.y2) ctx.lineTo(b.x, a.y);
-    ctx.lineTo(b.x, b.y);
+    ctx.moveTo(a.x + (b.x - a.x) * t1, a.y + (b.y - a.y) * t1);
+    ctx.lineTo(a.x + (b.x - a.x) * t2, a.y + (b.y - a.y) * t2);
     ctx.stroke();
   }
 
