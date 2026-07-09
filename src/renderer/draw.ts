@@ -455,25 +455,27 @@ function drawDungeonMap(
       const touchH = (ax + aw === bx || bx + bw === ax) && ay < by + bh && by < ay + ah;
       const touchV = (ay + ah === by || by + bh === ay) && ax < bx + bw && bx < ax + aw;
       if (touchH || touchV) {
-        // セル間の隙間（cellRect の ±2px マージン）を白で塗って一体化させる
+        // 隣接部屋の通路: 濃いグレーの帯で部屋どうしを橋渡しする。
+        // 白い部屋と白い部屋の間なので、パネル背景より暗い色でないと見えない
         const overlapX1 = Math.max(ax, bx);
         const overlapX2 = Math.min(ax + aw, bx + bw);
         const overlapY1 = Math.max(ay, by);
         const overlapY2 = Math.min(ay + ah, by + bh);
-        ctx.fillStyle = 'rgba(255,255,255,1)';
+        ctx.fillStyle = 'rgba(45, 48, 58, 0.9)';
+        const thickness = Math.max(10, cell * 0.22);
         if (touchH) {
           const boundary = ax + aw === bx ? ax + aw : bx + bw;
-          const gapX = gridX + (boundary - 1) * cell - 3;
-          const gapY = gridY + (overlapY1 - 1) * cell + 2;
-          const gapH = (overlapY2 - overlapY1) * cell - 4;
-          // 幅は隙間 4px＋両側の枠線 2px ぶんを覆う
-          ctx.fillRect(gapX, gapY + gapH * 0.25, 6, gapH * 0.5);
+          const bx0 = gridX + (boundary - 1) * cell;
+          const gapY = gridY + (overlapY1 - 1) * cell;
+          const gapH = (overlapY2 - overlapY1) * cell;
+          // 帯は境界を跨ぎ、両側の部屋の内側に少し食い込む。上下は共有辺の中央 60%
+          ctx.fillRect(bx0 - thickness / 2, gapY + gapH * 0.2, thickness, gapH * 0.6);
         } else {
           const boundary = ay + ah === by ? ay + ah : by + bh;
-          const gapX = gridX + (overlapX1 - 1) * cell + 2;
-          const gapY = gridY + (boundary - 1) * cell - 3;
-          const gapW = (overlapX2 - overlapX1) * cell - 4;
-          ctx.fillRect(gapX + gapW * 0.25, gapY, gapW * 0.5, 6);
+          const by0 = gridY + (boundary - 1) * cell;
+          const gapX = gridX + (overlapX1 - 1) * cell;
+          const gapW = (overlapX2 - overlapX1) * cell;
+          ctx.fillRect(gapX + gapW * 0.2, by0 - thickness / 2, gapW * 0.6, thickness);
         }
         ctx.fillStyle = 'rgba(25,25,35,0.85)';
         continue;
